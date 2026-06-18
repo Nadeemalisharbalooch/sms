@@ -8,5 +8,5 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('login',LoginController::class)->name('login');
 Route::post('register',RegisterController::class)->name('register');
-Route::post('logout',LogoutController::class)->name('logout')->middleware('auth');
-Route::resource('institutes',InstituteController::class);
+Route::post('logout',LogoutController::class)->name('logout')->middleware('auth:sanctum');
+Route::resource('institutes',InstituteController::class)->middleware('auth:sanctum');
