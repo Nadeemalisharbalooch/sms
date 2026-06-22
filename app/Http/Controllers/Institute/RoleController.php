@@ -71,8 +71,18 @@ class RoleController extends Controller
 
         $role->update($validated);
 
-        if (isset($validated['permissions'])) {
-            $role->syncPermissions($validated['permissions']);
+        if (array_key_exists('permissions', $validated)) {
+            // UpdateRoleRequest validates `permissions.*` as permission IDs.
+            // Spatie's syncPermissions expects permission names by default.
+            $permissionIds = $validated['permissions'] ?? [];
+
+            $permissionNames = \Spatie\Permission\Models\Permission::query()
+                ->where('guard_name', $role->guard_name)
+                ->whereIn('id', $permissionIds)
+                ->pluck('name')
+                ->all();
+
+            $role->syncPermissions($permissionNames);
         }
 
         return ResponseService::success(
