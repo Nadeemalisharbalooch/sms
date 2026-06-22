@@ -5,14 +5,14 @@ namespace App\Http\Requests\Institute;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
-class InstituteStoreRequest extends FormRequest
+class StoreRoleRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
      */
     public function authorize(): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -22,8 +22,9 @@ class InstituteStoreRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [
-            //
+         return [
+            'is_active' => 'nullable|boolean',
+            'name' => 'required|string|unique:roles,name|max:100',
         ];
     }
 }
