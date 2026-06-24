@@ -37,7 +37,6 @@ class RoleController extends Controller
      */
     public function store(StoreRoleRequest $request)
     {
-
          $validated = $request->validated();
          $role = Role::create($validated);
          return ResponseService::success(
@@ -49,10 +48,16 @@ class RoleController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(string $id)
+     public function show(Role $role)
     {
+        $role->load('permissions');
 
+        return ResponseService::success(
+            new RoleResource($role),
+            'Role retrieved successfully'
+        );
     }
+
 
     /**
      * Show the form for editing the specified resource.
