@@ -12,9 +12,10 @@ Route::prefix('institute')->group(function () {
 Route::middleware('auth:sanctum')->group(function (){
 
         // Resources
-        Route::apiResource('institutes', InstituteController::class);
+
         Route::apiResource('roles', RoleController::class);
         Route::apiResource('users', UserController::class);
 });
 });
+  Route::apiResource('institutes', InstituteController::class)->middleware('auth:sanctum');
 

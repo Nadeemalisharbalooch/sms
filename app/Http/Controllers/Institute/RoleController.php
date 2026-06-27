@@ -72,6 +72,7 @@ class RoleController extends Controller
      */
     public function update(UpdateRoleRequest $request, Role $role)
     {
+
         $validated = $request->validated();
 
         $role->update($validated);
@@ -81,8 +82,24 @@ class RoleController extends Controller
             // Spatie's syncPermissions expects permission names by default.
             $permissionIds = $validated['permissions'] ?? [];
 
+            // Frontend kabhi-kabhi comma-separated string values bhej deta hai,
+            // e.g. ["1,2,3,4"] instead of [1,2,3,4].
+            // Normalize karke proper array of integer IDs bana dete hain.
+            $permissionIds = collect($permissionIds)
+                ->flatMap(function ($item) {
+                    if (is_string($item) && str_contains($item, ',')) {
+                        return array_map('trim', explode(',', $item));
+                    }
+                    return [$item];
+                })
+                ->filter(fn ($v) => $v !== null && $v !== '')
+                ->map(fn ($v) => (int) $v)
+                ->values()
+                ->all();
+
+            // Use the permissions' own guard_name instead of relying on $role->guard_name,
+            // because $role->guard_name can be null/incorrect if frontend didn't send it.
             $permissionNames = \Spatie\Permission\Models\Permission::query()
-                ->where('guard_name', $role->guard_name)
                 ->whereIn('id', $permissionIds)
                 ->pluck('name')
                 ->all();

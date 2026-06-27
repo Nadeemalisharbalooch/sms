@@ -20,6 +20,8 @@ class LoginResource extends JsonResource
             'id'=>$this->id,
             'name'=>$this->name,
             'email'=>$this->email,
+            'is_institute'=>$this->is_institute,
+            'is_admin'=>$this->is_admin,
              'type' => 'Bearer',
             'token' => $token,
         ];
