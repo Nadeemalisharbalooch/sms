@@ -35,15 +35,53 @@ class RoleController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(StoreRoleRequest $request)
-    {
-         $validated = $request->validated();
-         $role = Role::create($validated);
-         return ResponseService::success(
-            new RoleResource($role),
-            'Role created successfully'
-        );
+  public function store(StoreRoleRequest $request)
+{
+
+    $validated = $request->validated();
+    // Get guard_name from request or use default
+    $guardName = $validated['guard_name'] ?? 'sanctum';
+
+    // Create role with guard_name
+    $role = Role::create([
+        'name' => $validated['name'],
+        'guard_name' => $guardName
+    ]);
+
+    // Check if permissions are provided in the request
+    if (array_key_exists('permissions', $validated)) {
+        // Normalize permissions similar to update method
+        $permissionIds = $validated['permissions'] ?? [];
+
+        // Normalize to proper array of integer IDs
+        $permissionIds = collect($permissionIds)
+            ->flatMap(function ($item) {
+                if (is_string($item) && str_contains($item, ',')) {
+                    return array_map('trim', explode(',', $item));
+                }
+                return [$item];
+            })
+            ->filter(fn ($v) => $v !== null && $v !== '')
+            ->map(fn ($v) => (int) $v)
+            ->values()
+            ->all();
+
+        // Get permission names by their IDs with proper guard
+        $permissionNames = \Spatie\Permission\Models\Permission::query()
+            ->whereIn('id', $permissionIds)
+            ->where('guard_name', $guardName) // Important: match guard
+            ->pluck('name')
+            ->all();
+
+        // Assign permissions to the new role
+        $role->syncPermissions($permissionNames);
     }
+
+    return ResponseService::success(
+        new RoleResource($role->load('permissions')),
+        'Role created successfully'
+    );
+}
 
     /**
      * Display the specified resource.

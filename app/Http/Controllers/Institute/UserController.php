@@ -33,16 +33,70 @@ class UserController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-   public function store(UserStoreRequest $request)
-    {
-         $validated = $request->validated();
-        $user = User::create($validated);
+  public function store(UserStoreRequest $request)
+{
+    $validated = $request->validated();
 
-        return ResponseService::success(
-            new UserResource($user),
-            'User created successfully'
-        );
+    // Create user
+    $user = User::create($validated);
+
+    // Spatie role assign similar to update method
+    // Frontend roles IDs bhej sakta hai (role_ids) ya role me array/ids.
+    if (array_key_exists('role_ids', $validated) && !empty($validated['role_ids'])) {
+        $roleIdsRaw = $validated['role_ids'];
+
+        $roleIds = collect(is_string($roleIdsRaw) ? [$roleIdsRaw] : $roleIdsRaw)
+            ->flatMap(function ($item) {
+                if (is_string($item) && str_contains($item, ',')) {
+                    return array_map('trim', explode(',', $item));
+                }
+                return [$item];
+            })
+            ->filter(fn ($v) => $v !== null && $v !== '')
+            ->map(fn ($v) => (int) $v)
+            ->values()
+            ->all();
+
+        $roleNames = \Spatie\Permission\Models\Role::query()
+            ->whereIn('id', $roleIds)
+            ->pluck('name')
+            ->all();
+
+        $user->syncRoles($roleNames);
     }
+
+    // Backward-compatible: if frontend sends `role` as IDs array.
+    if (array_key_exists('role', $validated) && !empty($validated['role'])) {
+        $roleIdsRaw = $validated['role'];
+
+        $roleIds = collect(is_string($roleIdsRaw) ? [$roleIdsRaw] : $roleIdsRaw)
+            ->flatMap(function ($item) {
+                if (is_string($item) && str_contains($item, ',')) {
+                    return array_map('trim', explode(',', $item));
+                }
+                return [$item];
+            })
+            ->filter(fn ($v) => $v !== null && $v !== '')
+            ->map(fn ($v) => (int) $v)
+            ->values()
+            ->all();
+
+        $roleNames = \Spatie\Permission\Models\Role::query()
+            ->whereIn('id', $roleIds)
+            ->pluck('name')
+            ->all();
+
+        $user->syncRoles($roleNames);
+    }
+
+    // Eager load roles so UserResource can return them
+    $user->load('roles');
+
+    return ResponseService::success(
+        new UserResource($user),
+        'User created successfully'
+    );
+}
 
     /**
      * Display the specified resource.
@@ -61,27 +115,53 @@ class UserController extends Controller
 
         $user = User::findOrFail($id);
 
-        // Spatie role assign. If request has `role` (role name), sync it.
+        // Spatie role assign.
+        // Frontend ab roles IDs bhej sakta hai (role_ids) ya role me array/ids.
+        if (array_key_exists('role_ids', $validated) && !empty($validated['role_ids'])) {
+            $roleIdsRaw = $validated['role_ids'];
+            unset($validated['role_ids']);
+
+            $roleIds = collect(is_string($roleIdsRaw) ? [$roleIdsRaw] : $roleIdsRaw)
+                ->flatMap(function ($item) {
+                    if (is_string($item) && str_contains($item, ',')) {
+                        return array_map('trim', explode(',', $item));
+                    }
+                    return [$item];
+                })
+                ->filter(fn ($v) => $v !== null && $v !== '')
+                ->map(fn ($v) => (int) $v)
+                ->values()
+                ->all();
+
+            $roleNames = \Spatie\Permission\Models\Role::query()
+                ->whereIn('id', $roleIds)
+                ->pluck('name')
+                ->all();
+
+            $user->syncRoles($roleNames);
+        }
+
+        // Backward-compatible: if frontend sends `role` as IDs array.
         if (array_key_exists('role', $validated) && !empty($validated['role'])) {
-            // Remove role from attributes before updating, because `role` isn't a column.
-            $roleName = $validated['role'];
+            $roleIdsRaw = $validated['role'];
             unset($validated['role']);
 
-            // Spatie role assignment requires HasRoles trait on User model.
-            // For now, call helper via app('...') is not available, so we can only proceed
-            // if traits are present. Assign role by name:
-            // If frontend sends a single role name: "admin"
-            // If frontend sends multiple role names: ["admin","user"] or "admin,user"
-            $roleNames = $roleName;
-            if (is_string($roleNames) && str_contains($roleNames, ',')) {
-                $roleNames = array_values(array_filter(array_map('trim', explode(',', $roleNames))));
-            }
+            $roleIds = collect(is_string($roleIdsRaw) ? [$roleIdsRaw] : $roleIdsRaw)
+                ->flatMap(function ($item) {
+                    if (is_string($item) && str_contains($item, ',')) {
+                        return array_map('trim', explode(',', $item));
+                    }
+                    return [$item];
+                })
+                ->filter(fn ($v) => $v !== null && $v !== '')
+                ->map(fn ($v) => (int) $v)
+                ->values()
+                ->all();
 
-            if (is_array($roleNames)) {
-                $roleNames = array_values($roleNames);
-            } else {
-                $roleNames = [$roleNames];
-            }
+            $roleNames = \Spatie\Permission\Models\Role::query()
+                ->whereIn('id', $roleIds)
+                ->pluck('name')
+                ->all();
 
             $user->syncRoles($roleNames);
         }

@@ -22,9 +22,13 @@ class StoreRoleRequest extends FormRequest
      */
     public function rules(): array
     {
-         return [
+        return [
             'is_active' => 'nullable|boolean',
             'name' => 'required|string|unique:roles,name|max:100',
+
+             'guard_name' => ['nullable', 'in:web,sanctum'],
+            'permissions' => 'nullable|array',
+            'permissions.*' => 'exists:permissions,id',
         ];
     }
 }

@@ -32,7 +32,12 @@ class UserUpdateRequest extends FormRequest
             'password' => 'nullable|string|min:8|confirmed',
             'is_admin' => 'sometimes|boolean',
             'is_active' => 'sometimes|boolean',
-            'role' => 'sometimes|string|exists:roles,name',
+'role_ids' => 'sometimes|nullable',
+            'role_ids.*' => 'exists:roles,id',
+
+            // Backward-compatible: frontend may send `role` as role IDs (array or comma-separated string).
+            'role' => 'sometimes|nullable',
+            'role.*' => 'exists:roles,id',
         ];
     }
 }

@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Institute\InstituteController;
+use App\Http\Controllers\Institute\PermissionController;
 use App\Http\Controllers\Institute\RoleController;
 use App\Http\Controllers\Institute\UserController;
 use Illuminate\Support\Facades\Route;
@@ -15,6 +16,7 @@ Route::middleware('auth:sanctum')->group(function (){
 
         Route::apiResource('roles', RoleController::class);
         Route::apiResource('users', UserController::class);
+        Route::apiResource('permissions',PermissionController::class);
 });
 });
   Route::apiResource('institutes', InstituteController::class)->middleware('auth:sanctum');
