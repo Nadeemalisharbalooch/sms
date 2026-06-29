@@ -14,7 +14,7 @@ use Spatie\Permission\Models\Role;
 use Spatie\Permission\Traits\HasPermissions;
 use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['name', 'email', 'password','is_institute','is_active','is_admin'])]
+#[Fillable(['name', 'email', 'password','is_institute','is_active','is_admin','address','phone'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {

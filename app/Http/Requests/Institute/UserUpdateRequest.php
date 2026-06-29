@@ -30,9 +30,11 @@ class UserUpdateRequest extends FormRequest
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email,'.$userId.',id',
             'password' => 'nullable|string|min:8|confirmed',
+            'phone'  =>'nullable|string',
+            'address'=>'nullable|string',
             'is_admin' => 'sometimes|boolean',
             'is_active' => 'sometimes|boolean',
-'role_ids' => 'sometimes|nullable',
+            'role_ids' => 'sometimes|nullable',
             'role_ids.*' => 'exists:roles,id',
 
             // Backward-compatible: frontend may send `role` as role IDs (array or comma-separated string).

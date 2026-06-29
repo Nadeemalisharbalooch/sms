@@ -16,26 +16,26 @@ class UserController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
-    {
-        /*  $this->authorizePermission('users.list'); */
-         $users = User::withTrashed()
-            ->where('is_admin', false)
-            ->where('id', '!=', Auth::id())
-            ->paginate(10);
+   public function index()
+{
+    $users = User::with(['roles'])
+        ->withTrashed()
+        ->where('is_admin', false)
+        ->where('id', '!=', Auth::id())
+        ->paginate(10);
 
-        return ResponseService::success(
-            UserResource::collection($users),
-            'Users retrieved successfully'
-        );
-    }
-
+    return ResponseService::success(
+        UserResource::collection($users),
+        'Users retrieved successfully'
+    );
+}
     /**
      * Store a newly created resource in storage.
      */
   public function store(UserStoreRequest $request)
 {
     $validated = $request->validated();
+    $validated['is_accept_terms'] = true;
 
     // Create user
     $user = User::create($validated);
@@ -101,9 +101,14 @@ class UserController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(string $id)
+   public function show(User $user)
     {
-        //
+
+       $user->load('roles');
+        return ResponseService::success(
+            new UserResource($user),
+            'User retrieved successfully'
+        );
     }
 
     /**
@@ -112,7 +117,7 @@ class UserController extends Controller
     public function update(UserUpdateRequest $req, string $id)
     {
         $validated = $req->validated();
-
+        $validated['is_accept_terms'] = true;
         $user = User::findOrFail($id);
 
         // Spatie role assign.
