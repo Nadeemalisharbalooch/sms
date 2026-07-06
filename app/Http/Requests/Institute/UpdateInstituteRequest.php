@@ -30,7 +30,7 @@ class UpdateInstituteRequest extends FormRequest
                 'email:rfc,dns',
                 'max:255',
                 Rule::unique('institutes', 'email')
-                    ->ignore($this->route('institute'))
+                    ->ignore($this->route('institute'), 'id')
             ],
 
             'phone' => ['nullable', 'string', 'max:20'],

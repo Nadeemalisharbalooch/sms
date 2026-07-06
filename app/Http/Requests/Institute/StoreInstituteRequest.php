@@ -63,6 +63,21 @@ class StoreInstituteRequest extends FormRequest
                 'required',
                 Rule::in(['class', 'subject'])
             ],
+
+            'role_ids' => [
+                'sometimes',
+                'nullable',
+            ],
+            'role_ids.*' => [
+                'exists:roles,id',
+            ],
+            'role' => [
+                'sometimes',
+                'nullable',
+            ],
+            'role.*' => [
+                'exists:roles,id',
+            ],
         ];
     }
 

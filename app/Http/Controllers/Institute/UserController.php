@@ -8,103 +8,91 @@ use App\Http\Requests\Institute\UserUpdateRequest;
 use App\Http\Resources\Institute\UserResource;
 use App\Models\User;
 use App\Services\ResponseService;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
     /**
      * Display a listing of the resource.
      */
-   public function index()
-{
-    $users = User::with(['roles'])
-        ->withTrashed()
-        ->where('is_admin', false)
-        ->where('id', '!=', Auth::id())
-        ->paginate(10);
+    public function index()
+    {
+        $users = User::with(['roles'])
+            ->withTrashed()
+            ->where('is_admin', false)
+            ->where('id', '!=', Auth::id())
+            ->latest()
+            ->paginate(10);
 
-    return ResponseService::success(
-        UserResource::collection($users),
-        'Users retrieved successfully'
-    );
-}
+        return ResponseService::success(
+            UserResource::collection($users),
+            'Users retrieved successfully'
+        );
+    }
+
     /**
      * Store a newly created resource in storage.
      */
-  public function store(UserStoreRequest $request)
+   public function store(UserStoreRequest $request)
 {
     $validated = $request->validated();
-    $validated['is_accept_terms'] = true;
+    $userData = $this->userData($validated);
+    $userData['is_accept_terms'] = true;
 
-    // Create user
-    $user = User::create($validated);
+    // Use database transaction
+    \DB::beginTransaction();
+    try {
+        $user = User::create($userData);
 
-    // Spatie role assign similar to update method
-    // Frontend roles IDs bhej sakta hai (role_ids) ya role me array/ids.
-    if (array_key_exists('role_ids', $validated) && !empty($validated['role_ids'])) {
-        $roleIdsRaw = $validated['role_ids'];
+        // Get role IDs before creating user
+        $roleIds = $this->extractRoleIds($validated);
+        if (!empty($roleIds)) {
+            $roleNames = Role::query()
+                ->whereIn('id', $roleIds)
+                ->pluck('name')
+                ->all();
 
-        $roleIds = collect(is_string($roleIdsRaw) ? [$roleIdsRaw] : $roleIdsRaw)
-            ->flatMap(function ($item) {
-                if (is_string($item) && str_contains($item, ',')) {
-                    return array_map('trim', explode(',', $item));
-                }
-                return [$item];
-            })
-            ->filter(fn ($v) => $v !== null && $v !== '')
-            ->map(fn ($v) => (int) $v)
-            ->values()
-            ->all();
+            if (empty($roleNames)) {
+                throw new \Exception('Invalid role IDs provided');
+            }
 
-        $roleNames = \Spatie\Permission\Models\Role::query()
-            ->whereIn('id', $roleIds)
-            ->pluck('name')
-            ->all();
+            $user->syncRoles($roleNames);
+        }
 
-        $user->syncRoles($roleNames);
+        \DB::commit();
+
+        return ResponseService::success(
+            new UserResource($user->load('roles')),
+            'User created successfully',
+            201
+        );
+    } catch (\Exception $e) {
+        \DB::rollBack();
+        return ResponseService::error('Failed to create user: ' . $e->getMessage(), 422);
     }
+}
 
-    // Backward-compatible: if frontend sends `role` as IDs array.
-    if (array_key_exists('role', $validated) && !empty($validated['role'])) {
-        $roleIdsRaw = $validated['role'];
-
-        $roleIds = collect(is_string($roleIdsRaw) ? [$roleIdsRaw] : $roleIdsRaw)
-            ->flatMap(function ($item) {
-                if (is_string($item) && str_contains($item, ',')) {
-                    return array_map('trim', explode(',', $item));
-                }
-                return [$item];
-            })
-            ->filter(fn ($v) => $v !== null && $v !== '')
-            ->map(fn ($v) => (int) $v)
-            ->values()
-            ->all();
-
-        $roleNames = \Spatie\Permission\Models\Role::query()
-            ->whereIn('id', $roleIds)
-            ->pluck('name')
-            ->all();
-
-        $user->syncRoles($roleNames);
+private function extractRoleIds(array $validated): array
+{
+    if (array_key_exists('role_ids', $validated)) {
+        return $this->normalizeRoleIds($validated['role_ids']);
+    } elseif (array_key_exists('role', $validated)) {
+        return $this->normalizeRoleIds($validated['role']);
     }
-
-    // Eager load roles so UserResource can return them
-    $user->load('roles');
-
-    return ResponseService::success(
-        new UserResource($user),
-        'User created successfully'
-    );
+    return [];
 }
 
     /**
      * Display the specified resource.
      */
-   public function show(User $user)
+    public function show(string $id)
     {
+        $user = User::withTrashed()
+            ->with('roles')
+            ->where('is_admin', false)
+            ->findOrFail($id);
 
-       $user->load('roles');
         return ResponseService::success(
             new UserResource($user),
             'User retrieved successfully'
@@ -114,74 +102,29 @@ class UserController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(UserUpdateRequest $req, string $id)
+    public function update(UserUpdateRequest $request, string $id)
     {
-        $validated = $req->validated();
-        $validated['is_accept_terms'] = true;
-        $user = User::findOrFail($id);
-
-        // Spatie role assign.
-        // Frontend ab roles IDs bhej sakta hai (role_ids) ya role me array/ids.
-        if (array_key_exists('role_ids', $validated) && !empty($validated['role_ids'])) {
-            $roleIdsRaw = $validated['role_ids'];
-            unset($validated['role_ids']);
-
-            $roleIds = collect(is_string($roleIdsRaw) ? [$roleIdsRaw] : $roleIdsRaw)
-                ->flatMap(function ($item) {
-                    if (is_string($item) && str_contains($item, ',')) {
-                        return array_map('trim', explode(',', $item));
-                    }
-                    return [$item];
-                })
-                ->filter(fn ($v) => $v !== null && $v !== '')
-                ->map(fn ($v) => (int) $v)
-                ->values()
-                ->all();
-
-            $roleNames = \Spatie\Permission\Models\Role::query()
-                ->whereIn('id', $roleIds)
-                ->pluck('name')
-                ->all();
-
-            $user->syncRoles($roleNames);
+        if ((int) $id === Auth::id()) {
+            return ResponseService::error('You cannot update your own account from here', 403);
         }
 
-        // Backward-compatible: if frontend sends `role` as IDs array.
-        if (array_key_exists('role', $validated) && !empty($validated['role'])) {
-            $roleIdsRaw = $validated['role'];
-            unset($validated['role']);
+        $validated = $request->validated();
+        $user = User::where('is_admin', false)->findOrFail($id);
+        $userData = $this->userData($validated);
 
-            $roleIds = collect(is_string($roleIdsRaw) ? [$roleIdsRaw] : $roleIdsRaw)
-                ->flatMap(function ($item) {
-                    if (is_string($item) && str_contains($item, ',')) {
-                        return array_map('trim', explode(',', $item));
-                    }
-                    return [$item];
-                })
-                ->filter(fn ($v) => $v !== null && $v !== '')
-                ->map(fn ($v) => (int) $v)
-                ->values()
-                ->all();
-
-            $roleNames = \Spatie\Permission\Models\Role::query()
-                ->whereIn('id', $roleIds)
-                ->pluck('name')
-                ->all();
-
-            $user->syncRoles($roleNames);
+        if (array_key_exists('password', $userData) && blank($userData['password'])) {
+            unset($userData['password']);
         }
 
-        // Update user fields (name/email/password/is_admin/is_active)
-        if (!empty($validated)) {
-            $user->update($validated);
+        if (!empty($userData)) {
+            $user->update($userData);
         }
 
-        // Eager load roles so UserResource can return them
-        $user->load('roles');
+        $this->syncRolesFromRequest($user, $validated);
 
         return ResponseService::success(
-            new UserResource($user),
-            'user updated successfully'
+            new UserResource($user->load('roles')),
+            'User updated successfully'
         );
     }
 
@@ -190,6 +133,62 @@ class UserController extends Controller
      */
     public function destroy(string $id)
     {
-        //
+        if ((int) $id === Auth::id()) {
+            return ResponseService::error('You cannot delete your own account', 403);
+        }
+
+        $user = User::where('is_admin', false)->findOrFail($id);
+        $user->delete();
+
+        return ResponseService::success(
+            new UserResource($user->load('roles')),
+            'User deleted successfully'
+        );
+    }
+
+    private function userData(array $validated): array
+    {
+        unset($validated['role_ids'], $validated['role']);
+
+        return $validated;
+    }
+
+    private function syncRolesFromRequest(User $user, array $validated): void
+    {
+        if (array_key_exists('role_ids', $validated)) {
+            $roleIds = $this->normalizeRoleIds($validated['role_ids']);
+        } elseif (array_key_exists('role', $validated)) {
+            $roleIds = $this->normalizeRoleIds($validated['role']);
+        } else {
+            return;
+        }
+
+        $roleNames = Role::query()
+            ->whereIn('id', $roleIds)
+            ->pluck('name')
+            ->all();
+
+        $user->syncRoles($roleNames);
+    }
+
+    private function normalizeRoleIds(mixed $roles): array
+    {
+        if ($roles === null) {
+            return [];
+        }
+
+        return collect(is_array($roles) ? $roles : [$roles])
+            ->flatMap(function ($item) {
+                if (is_string($item) && str_contains($item, ',')) {
+                    return array_map('trim', explode(',', $item));
+                }
+
+                return [$item];
+            })
+            ->filter(fn ($value) => $value !== null && $value !== '')
+            ->map(fn ($value) => (int) $value)
+            ->unique()
+            ->values()
+            ->all();
     }
 }

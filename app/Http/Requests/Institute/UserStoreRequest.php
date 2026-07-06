@@ -22,14 +22,21 @@ class UserStoreRequest extends FormRequest
      */
     public function rules(): array
     {
-         return [
-
+        return [
 
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:8|confirmed',
             'is_admin' => 'sometimes|boolean',
             'is_active' => 'sometimes|boolean',
+
+            // Roles (Spatie)
+            'role_ids' => 'sometimes|nullable',
+            'role_ids.*' => 'exists:roles,id',
+
+            // Backward-compatible: frontend may send `role` as role IDs (array or comma-separated string).
+            'role' => 'sometimes|nullable',
+            'role.*' => 'exists:roles,id',
         ];
     }
 }
