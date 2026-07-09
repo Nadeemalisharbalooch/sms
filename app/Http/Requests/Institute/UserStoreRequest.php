@@ -27,10 +27,11 @@ class UserStoreRequest extends FormRequest
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:8|confirmed',
+            'phone'  =>'nullable',
+            'address'=>'nullable|string',
             'is_admin' => 'sometimes|boolean',
             'is_active' => 'sometimes|boolean',
 
-            // Roles (Spatie)
             'role_ids' => 'sometimes|nullable',
             'role_ids.*' => 'exists:roles,id',
 
@@ -40,3 +41,5 @@ class UserStoreRequest extends FormRequest
         ];
     }
 }
+
+

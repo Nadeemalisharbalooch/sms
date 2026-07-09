@@ -14,8 +14,8 @@ return new class extends Migration
         Schema::create('institutes', function (Blueprint $table) {
             $table->id();
             $table->ulid('public_id')->unique();
-                $table->string('name')->nullable();
-                 $table->string('email')->nullable();
+            $table->string('name')->nullable();
+            $table->string('email')->nullable();
              $table->string('phone')->nullable();
              $table->text('address')->nullable();
              $table->string('logo')->nullable();

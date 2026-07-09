@@ -17,6 +17,8 @@ Route::middleware('auth:sanctum')->group(function (){
         Route::apiResource('roles', RoleController::class);
         Route::apiResource('users', UserController::class);
         Route::apiResource('permissions',PermissionController::class);
+        Route::delete('/users/{id}/force-delete', [UserController::class, 'forceDestroy'])
+    ->name('users.forceDestroy');
 });
 });
   Route::apiResource('institutes', InstituteController::class)->middleware('auth:sanctum');

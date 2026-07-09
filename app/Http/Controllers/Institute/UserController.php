@@ -146,6 +146,28 @@ private function extractRoleIds(array $validated): array
         );
     }
 
+    public function forceDestroy($id)
+{
+    $user = User::withTrashed()->findOrFail($id);
+
+    // Optional: Prevent deleting yourself
+    if ($user->id === auth()->id()) {
+        return response()->json([
+            'message' => 'You cannot permanently delete your own account.'
+        ], 422);
+    }
+
+    // Remove Spatie roles
+    $user->syncRoles([]);
+
+    // Permanently delete user
+    $user->forceDelete();
+
+    return response()->json([
+        'message' => 'User permanently deleted successfully.'
+    ]);
+}
+
     private function userData(array $validated): array
     {
         unset($validated['role_ids'], $validated['role']);
