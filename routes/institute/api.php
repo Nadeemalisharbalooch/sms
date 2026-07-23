@@ -3,6 +3,8 @@
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\Institute\AcademicSessionController;
+use App\Http\Controllers\Institute\AcademicClassController;
 use App\Http\Controllers\Institute\InstituteController;
 use App\Http\Controllers\Institute\PermissionController;
 use App\Http\Controllers\Institute\RoleController;
@@ -21,5 +23,13 @@ Route::middleware('auth:sanctum')->group(function (){
     ->name('users.forceDestroy');
 });
 });
-  Route::apiResource('institutes', InstituteController::class)->middleware('auth:sanctum');
 
+Route::middleware('auth:sanctum')->group(function () {
+    Route::apiResource('institutes/academic-sessions', AcademicSessionController::class)
+        ->parameters(['academic-sessions' => 'academic_session']);
+
+    Route::apiResource('institutes/classes', AcademicClassController::class)
+        ->parameters(['classes' => 'academic_class']);
+
+    Route::apiResource('institutes', InstituteController::class);
+});
