@@ -4,16 +4,16 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class AcademicClass extends Model
+class AcademicSection extends Model
 {
-    protected $table = 'classes';
+    protected $table = 'sections';
 
     protected $fillable = [
-        'institute_id',
+        'class_id',
         'name',
         'code',
+        'capacity',
         'display_order',
         'is_active',
     ];
@@ -21,18 +21,14 @@ class AcademicClass extends Model
     protected function casts(): array
     {
         return [
+            'capacity' => 'integer',
             'display_order' => 'integer',
             'is_active' => 'boolean',
         ];
     }
 
-    public function institute(): BelongsTo
+    public function academicClass(): BelongsTo
     {
-        return $this->belongsTo(Institute::class);
-    }
-
-    public function sections(): HasMany
-    {
-        return $this->hasMany(AcademicSection::class, 'class_id');
+        return $this->belongsTo(AcademicClass::class, 'class_id');
     }
 }

@@ -5,6 +5,7 @@ use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Institute\AcademicSessionController;
 use App\Http\Controllers\Institute\AcademicClassController;
+use App\Http\Controllers\Institute\AcademicSectionController;
 use App\Http\Controllers\Institute\InstituteController;
 use App\Http\Controllers\Institute\PermissionController;
 use App\Http\Controllers\Institute\RoleController;
@@ -30,6 +31,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::apiResource('institutes/classes', AcademicClassController::class)
         ->parameters(['classes' => 'academic_class']);
+
+    Route::apiResource('institutes/sections', AcademicSectionController::class)
+        ->parameters(['sections' => 'academic_section']);
 
     Route::apiResource('institutes', InstituteController::class);
 });
