@@ -32,7 +32,10 @@ class UpdateRoleRequest extends FormRequest
                 'required',
                 'string',
                 'max:100',
-                Rule::unique('roles', 'name')->ignore(optional($this->route('role'))->id),
+                Rule::unique('roles', 'name')
+                    ->ignore(optional($this->route('role'))->id)
+                    ->where('institute_id', $this->activeInstituteId())
+                    ->where('guard_name', $this->input('guard_name', 'sanctum')),
 
             ],
             'guard_name' => ['nullable', 'in:web,sanctum'],
@@ -40,5 +43,12 @@ class UpdateRoleRequest extends FormRequest
             'permissions.*' => 'exists:permissions,id',
         ];
 
+    }
+
+    private function activeInstituteId(): ?int
+    {
+        return $this->user()?->instituteUsers()
+            ->where('is_active', true)
+            ->value('institute_id');
     }
 }

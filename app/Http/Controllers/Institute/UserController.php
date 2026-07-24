@@ -140,10 +140,7 @@ private function extractRoleIds(array $validated): array
         $user = User::where('is_admin', false)->findOrFail($id);
         $user->delete();
 
-        return ResponseService::success(
-            new UserResource($user->load('roles')),
-            'User deleted successfully'
-        );
+        return ResponseService::success(null, 'User deleted successfully');
     }
 
     /**
@@ -176,7 +173,6 @@ private function extractRoleIds(array $validated): array
             return ResponseService::error('You cannot permanently delete your own account', 403);
         }
 
-        $user->syncRoles([]);
         $user->forceDelete();
 
         return ResponseService::success(null, 'User permanently deleted successfully');

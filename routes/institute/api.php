@@ -37,5 +37,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('institutes/sections', AcademicSectionController::class)
         ->parameters(['sections' => 'academic_section']);
 
+    Route::patch('institutes/{institute}/activate', [InstituteController::class, 'activate'])
+        ->name('institutes.activate');
+
     Route::apiResource('institutes', InstituteController::class);
 });

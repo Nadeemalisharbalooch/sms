@@ -9,9 +9,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Laravel\Sanctum\HasApiTokens;
-use Spatie\Permission\Models\Role;
-use Spatie\Permission\Traits\HasPermissions;
 use Spatie\Permission\Traits\HasRoles;
 
 #[Fillable(['name', 'email', 'password','is_institute','is_active','is_admin','address','phone'])]
@@ -19,7 +18,7 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, SoftDeletes, HasApiTokens, Notifiable, HasRoles, HasPermissions;
+    use HasFactory, SoftDeletes, HasApiTokens, Notifiable, HasRoles;
 
     /**
      * Get the attributes that should be cast.
@@ -34,7 +33,11 @@ class User extends Authenticatable
         ];
     }
 
+    public function instituteUsers(): HasMany
+    {
+        return $this->hasMany(InstituteUser::class);
+    }
+
     // If you want to restrict to certain role types/guards later, you can customize here.
     // For now, default Spatie behavior is used.
 }
-

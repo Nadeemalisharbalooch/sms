@@ -4,6 +4,7 @@ namespace App\Http\Requests\Institute;
 
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreRoleRequest extends FormRequest
 {
@@ -24,11 +25,25 @@ class StoreRoleRequest extends FormRequest
     {
         return [
             'is_active' => 'nullable|boolean',
-            'name' => 'required|string|unique:roles,name|max:100',
+            'name' => [
+                'required',
+                'string',
+                'max:100',
+                Rule::unique('roles', 'name')
+                    ->where('institute_id', $this->activeInstituteId())
+                    ->where('guard_name', $this->input('guard_name', 'sanctum')),
+            ],
 
              'guard_name' => ['nullable', 'in:web,sanctum'],
             'permissions' => 'nullable|array',
             'permissions.*' => 'exists:permissions,id',
         ];
+    }
+
+    private function activeInstituteId(): ?int
+    {
+        return $this->user()?->instituteUsers()
+            ->where('is_active', true)
+            ->value('institute_id');
     }
 }

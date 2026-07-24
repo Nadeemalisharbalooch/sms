@@ -13,6 +13,7 @@ use App\Services\ResponseService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Spatie\Permission\Models\Role;
 
 class InstituteController extends Controller
 {
@@ -55,12 +56,25 @@ public function store(StoreInstituteRequest $request)
             'is_institute' => true,
         ]);
 
+        InstituteUser::query()
+            ->where('user_id', $user->id)
+            ->where('is_active', true)
+            ->update(['is_active' => false]);
+
         InstituteUser::create([
             'institute_id' => $institute->id,
             'user_id'      => $user->id,
             'is_owner'     => true,
             'is_active'    => true,
         ]);
+
+        foreach (['Admin', 'Teacher', 'Student'] as $roleName) {
+            Role::query()->create([
+                'institute_id' => $institute->id,
+                'name' => $roleName,
+                'guard_name' => 'sanctum',
+            ]);
+        }
 
         return $institute;
     });
@@ -70,6 +84,37 @@ public function store(StoreInstituteRequest $request)
         'Institute created successfully'
     );
 }
+
+    /**
+     * Set one of the authenticated user's institutes as active.
+     */
+    public function activate(Request $request, Institute $institute)
+    {
+        $userId = $request->user()->id;
+
+        $membership = InstituteUser::query()
+            ->where('user_id', $userId)
+            ->where('institute_id', $institute->id)
+            ->first();
+
+        if (! $membership) {
+            return ResponseService::notFound('Institute not found');
+        }
+
+        DB::transaction(function () use ($userId, $membership) {
+            InstituteUser::query()
+                ->where('user_id', $userId)
+                ->where('is_active', true)
+                ->update(['is_active' => false]);
+
+            $membership->update(['is_active' => true]);
+        });
+
+        return ResponseService::success(
+            new InstituteResource($institute),
+            'Active institute changed successfully'
+        );
+    }
 
     /**
      * Display the specified resource.

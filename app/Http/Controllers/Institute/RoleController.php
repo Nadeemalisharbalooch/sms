@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Institute\StoreRoleRequest;
 use App\Http\Requests\Institute\UpdateRoleRequest;
 use App\Http\Resources\Institute\RoleResource;
+use App\Models\InstituteUser;
 use App\Services\ResponseService;
 use Illuminate\Http\Request;
 use Spatie\Permission\Models\Role;
@@ -15,13 +16,24 @@ class RoleController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $roles=Role::all();
-    return ResponseService::success(
-    RoleResource::collection($roles),
-    'All roles including trashed retrieved successfully'
-  );
+        $instituteId = $this->activeInstituteId($request);
+
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $roles = Role::query()
+            ->where('institute_id', $instituteId)
+            ->with('permissions')
+            ->orderBy('name')
+            ->get();
+
+        return ResponseService::success(
+            RoleResource::collection($roles),
+            'Roles retrieved successfully'
+        );
     }
 
     /**
@@ -35,15 +47,21 @@ class RoleController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-  public function store(StoreRoleRequest $request)
+public function store(StoreRoleRequest $request)
 {
-
     $validated = $request->validated();
+    $instituteId = $this->activeInstituteId($request);
+
+    if ($instituteId === null) {
+        return ResponseService::error('No active institute is associated with this user', 422);
+    }
+
     // Get guard_name from request or use default
     $guardName = $validated['guard_name'] ?? 'sanctum';
 
     // Create role with guard_name
-    $role = Role::create([
+    $role = Role::query()->create([
+        'institute_id' => $instituteId,
         'name' => $validated['name'],
         'guard_name' => $guardName
     ]);
@@ -86,8 +104,12 @@ class RoleController extends Controller
     /**
      * Display the specified resource.
      */
-     public function show(Role $role)
+     public function show(Request $request, Role $role)
     {
+        if (! $this->belongsToActiveInstitute($request, $role)) {
+            return ResponseService::notFound('Role not found');
+        }
+
         $role->load('permissions');
 
         return ResponseService::success(
@@ -110,10 +132,13 @@ class RoleController extends Controller
      */
     public function update(UpdateRoleRequest $request, Role $role)
     {
+        if (! $this->belongsToActiveInstitute($request, $role)) {
+            return ResponseService::notFound('Role not found');
+        }
 
         $validated = $request->validated();
 
-        $role->update($validated);
+        $role->update(collect($validated)->only(['name', 'guard_name'])->all());
 
         if (array_key_exists('permissions', $validated)) {
             // UpdateRoleRequest validates `permissions.*` as permission IDs.
@@ -154,12 +179,31 @@ class RoleController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(role $role)
+    public function destroy(Request $request, Role $role)
     {
+        if (! $this->belongsToActiveInstitute($request, $role)) {
+            return ResponseService::notFound('Role not found');
+        }
+
         $role->delete();
         return ResponseService::success(
             new RoleResource($role),
             'Role Deleted successfully',
         );
+    }
+
+    private function activeInstituteId(Request $request): ?int
+    {
+        $instituteId = InstituteUser::query()
+            ->where('user_id', $request->user()->id)
+            ->where('is_active', true)
+            ->value('institute_id');
+
+        return $instituteId === null ? null : (int) $instituteId;
+    }
+
+    private function belongsToActiveInstitute(Request $request, Role $role): bool
+    {
+        return (int) $role->institute_id === $this->activeInstituteId($request);
     }
 }
