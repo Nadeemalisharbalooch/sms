@@ -20,6 +20,7 @@ class AcademicSession extends Model
         return [
             'start_date' => 'date',
             'end_date' => 'date',
+            'institute_id' => 'integer',
             'is_active' => 'boolean',
         ];
     }

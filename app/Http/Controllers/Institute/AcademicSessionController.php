@@ -105,10 +105,12 @@ class AcademicSessionController extends Controller
 
     private function activeInstituteId(Request $request): ?int
     {
-        return InstituteUser::query()
+        $instituteId = InstituteUser::query()
             ->where('user_id', $request->user()->id)
             ->where('is_active', true)
             ->value('institute_id');
+
+        return $instituteId === null ? null : (int) $instituteId;
     }
 
     private function belongsToActiveInstitute(Request $request, AcademicSession $academicSession): bool
