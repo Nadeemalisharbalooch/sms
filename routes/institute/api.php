@@ -19,6 +19,8 @@ Route::middleware('auth:sanctum')->group(function (){
 
         Route::apiResource('roles', RoleController::class);
         Route::apiResource('users', UserController::class);
+        Route::patch('/users/{id}/restore', [UserController::class, 'restore'])
+            ->name('users.restore');
         Route::apiResource('permissions',PermissionController::class);
         Route::delete('/users/{id}/force-delete', [UserController::class, 'forceDestroy'])
     ->name('users.forceDestroy');

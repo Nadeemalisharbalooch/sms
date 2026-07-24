@@ -101,7 +101,6 @@ class AcademicClassController extends Controller
         if (! $this->belongsToActiveInstitute($request, $academicClass)) {
             return ResponseService::notFound('Class not found');
         }
-
         $academicClass->delete();
 
         return ResponseService::success(null, 'Class deleted successfully');

@@ -146,27 +146,41 @@ private function extractRoleIds(array $validated): array
         );
     }
 
-    public function forceDestroy($id)
-{
-    $user = User::withTrashed()->findOrFail($id);
+    /**
+     * Restore a soft-deleted user.
+     */
+    public function restore(string $id)
+    {
+        $user = User::onlyTrashed()
+            ->where('is_admin', false)
+            ->findOrFail($id);
 
-    // Optional: Prevent deleting yourself
-    if ($user->id === auth()->id()) {
-        return response()->json([
-            'message' => 'You cannot permanently delete your own account.'
-        ], 422);
+        $user->restore();
+
+        return ResponseService::success(
+            new UserResource($user->load('roles')),
+            'User restored successfully'
+        );
     }
 
-    // Remove Spatie roles
-    $user->syncRoles([]);
+    /**
+     * Permanently delete a user that has already been soft deleted.
+     */
+    public function forceDestroy(string $id)
+    {
+        $user = User::onlyTrashed()
+            ->where('is_admin', false)
+            ->findOrFail($id);
 
-    // Permanently delete user
-    $user->forceDelete();
+        if ((int) $user->id === Auth::id()) {
+            return ResponseService::error('You cannot permanently delete your own account', 403);
+        }
 
-    return response()->json([
-        'message' => 'User permanently deleted successfully.'
-    ]);
-}
+        $user->syncRoles([]);
+        $user->forceDelete();
+
+        return ResponseService::success(null, 'User permanently deleted successfully');
+    }
 
     private function userData(array $validated): array
     {
