@@ -21,6 +21,7 @@ class AcademicClass extends Model
     protected function casts(): array
     {
         return [
+            'institute_id' => 'integer',
             'display_order' => 'integer',
             'is_active' => 'boolean',
         ];
