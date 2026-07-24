@@ -6,13 +6,61 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Institute\UserStoreRequest;
 use App\Http\Requests\Institute\UserUpdateRequest;
 use App\Http\Resources\Institute\UserResource;
+use App\Models\InstituteUser;
 use App\Models\User;
 use App\Services\ResponseService;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
+    /**
+     * Return the authenticated user's roles and permissions for the active institute.
+     */
+    public function currentPermissions(Request $request)
+    {
+        $instituteId = InstituteUser::query()
+            ->where('user_id', $request->user()->id)
+            ->where('is_active', true)
+            ->value('institute_id');
+
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $roles = $request->user()
+            ->roles()
+            ->where('roles.institute_id', $instituteId)
+            ->with('permissions:id,name,guard_name')
+            ->get(['roles.id', 'roles.name', 'roles.guard_name']);
+
+        $permissions = $roles
+            ->pluck('permissions')
+            ->flatten()
+            ->unique('id')
+            ->values()
+            ->map(fn ($permission) => [
+                'id' => $permission->id,
+                'name' => $permission->name,
+                'guard_name' => $permission->guard_name,
+            ]);
+
+        return ResponseService::success([
+            'user' => [
+                'id' => $request->user()->id,
+                'name' => $request->user()->name,
+                'email' => $request->user()->email,
+            ],
+            'roles' => $roles->map(fn ($role) => [
+                'id' => $role->id,
+                'name' => $role->name,
+                'guard_name' => $role->guard_name,
+            ])->values(),
+            'permissions' => $permissions,
+        ], 'Current user permissions retrieved successfully');
+    }
+
     /**
      * Display a listing of the resource.
      */

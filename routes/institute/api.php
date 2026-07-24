@@ -17,6 +17,9 @@ Route::middleware('auth:sanctum')->group(function (){
 
         // Resources
 
+        Route::get('users/current/permissions', [UserController::class, 'currentPermissions'])
+            ->name('users.current.permissions');
+
         Route::apiResource('roles', RoleController::class);
         Route::apiResource('users', UserController::class);
         Route::patch('/users/{id}/restore', [UserController::class, 'restore'])
