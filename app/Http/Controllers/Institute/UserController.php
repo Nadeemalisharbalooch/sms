@@ -64,12 +64,20 @@ class UserController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $users = User::with(['roles'])
+        $instituteId = $this->activeInstituteId($request);
+
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $users = User::query()
+            ->with(['roles' => fn ($query) => $query->where('roles.institute_id', $instituteId)])
             ->withTrashed()
             ->where('is_admin', false)
             ->where('id', '!=', Auth::id())
+            ->whereHas('instituteUsers', fn ($query) => $query->where('institute_id', $instituteId))
             ->latest()
             ->paginate(10);
 
@@ -82,41 +90,46 @@ class UserController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-   public function store(UserStoreRequest $request)
+public function store(UserStoreRequest $request)
 {
     $validated = $request->validated();
     $userData = $this->userData($validated);
     $userData['is_accept_terms'] = true;
+    $instituteId = $this->activeInstituteId($request);
 
-    // Use database transaction
-    \DB::beginTransaction();
+    if ($instituteId === null) {
+        return ResponseService::error('No active institute is associated with this user', 422);
+    }
+
     try {
-        $user = User::create($userData);
+        $user = \DB::transaction(function () use ($userData, $validated, $instituteId) {
+            $user = User::create($userData);
 
-        // Get role IDs before creating user
-        $roleIds = $this->extractRoleIds($validated);
-        if (!empty($roleIds)) {
-            $roleNames = Role::query()
-                ->whereIn('id', $roleIds)
-                ->pluck('name')
-                ->all();
+            InstituteUser::create([
+                'institute_id' => $instituteId,
+                'user_id' => $user->id,
+                'is_active' => true,
+            ]);
 
-            if (empty($roleNames)) {
+            $roles = $this->rolesForActiveInstitute($this->extractRoleIds($validated), $instituteId);
+
+            if ($roles->count() !== count($this->extractRoleIds($validated))) {
                 throw new \Exception('Invalid role IDs provided');
             }
 
-            $user->syncRoles($roleNames);
-        }
+            if ($roles->isNotEmpty()) {
+                $user->syncRoles($roles);
+            }
 
-        \DB::commit();
+            return $user;
+        });
 
         return ResponseService::success(
-            new UserResource($user->load('roles')),
+            new UserResource($user->load(['roles' => fn ($query) => $query->where('roles.institute_id', $instituteId)])),
             'User created successfully',
             201
         );
     } catch (\Exception $e) {
-        \DB::rollBack();
         return ResponseService::error('Failed to create user: ' . $e->getMessage(), 422);
     }
 }
@@ -134,12 +147,15 @@ private function extractRoleIds(array $validated): array
     /**
      * Display the specified resource.
      */
-    public function show(string $id)
+    public function show(Request $request, string $id)
     {
-        $user = User::withTrashed()
-            ->with('roles')
-            ->where('is_admin', false)
-            ->findOrFail($id);
+        $instituteId = $this->activeInstituteId($request);
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $user = $this->findInstituteUser($id, $instituteId, true);
+        $user->load(['roles' => fn ($query) => $query->where('roles.institute_id', $instituteId)]);
 
         return ResponseService::success(
             new UserResource($user),
@@ -156,22 +172,29 @@ private function extractRoleIds(array $validated): array
             return ResponseService::error('You cannot update your own account from here', 403);
         }
 
+        $instituteId = $this->activeInstituteId($request);
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
         $validated = $request->validated();
-        $user = User::where('is_admin', false)->findOrFail($id);
+        $user = $this->findInstituteUser($id, $instituteId);
         $userData = $this->userData($validated);
 
         if (array_key_exists('password', $userData) && blank($userData['password'])) {
             unset($userData['password']);
         }
 
-        if (!empty($userData)) {
-            $user->update($userData);
-        }
+        \DB::transaction(function () use ($user, $userData, $validated, $instituteId) {
+            if (!empty($userData)) {
+                $user->update($userData);
+            }
 
-        $this->syncRolesFromRequest($user, $validated);
+            $this->syncRolesFromRequest($user, $validated, $instituteId);
+        });
 
         return ResponseService::success(
-            new UserResource($user->load('roles')),
+            new UserResource($user->load(['roles' => fn ($query) => $query->where('roles.institute_id', $instituteId)])),
             'User updated successfully'
         );
     }
@@ -179,13 +202,18 @@ private function extractRoleIds(array $validated): array
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(string $id)
+    public function destroy(Request $request, string $id)
     {
         if ((int) $id === Auth::id()) {
             return ResponseService::error('You cannot delete your own account', 403);
         }
 
-        $user = User::where('is_admin', false)->findOrFail($id);
+        $instituteId = $this->activeInstituteId($request);
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $user = $this->findInstituteUser($id, $instituteId);
         $user->delete();
 
         return ResponseService::success(null, 'User deleted successfully');
@@ -194,16 +222,19 @@ private function extractRoleIds(array $validated): array
     /**
      * Restore a soft-deleted user.
      */
-    public function restore(string $id)
+    public function restore(Request $request, string $id)
     {
-        $user = User::onlyTrashed()
-            ->where('is_admin', false)
-            ->findOrFail($id);
+        $instituteId = $this->activeInstituteId($request);
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $user = $this->findInstituteUser($id, $instituteId, true, true);
 
         $user->restore();
 
         return ResponseService::success(
-            new UserResource($user->load('roles')),
+            new UserResource($user->load(['roles' => fn ($query) => $query->where('roles.institute_id', $instituteId)])),
             'User restored successfully'
         );
     }
@@ -211,11 +242,14 @@ private function extractRoleIds(array $validated): array
     /**
      * Permanently delete a user that has already been soft deleted.
      */
-    public function forceDestroy(string $id)
+    public function forceDestroy(Request $request, string $id)
     {
-        $user = User::onlyTrashed()
-            ->where('is_admin', false)
-            ->findOrFail($id);
+        $instituteId = $this->activeInstituteId($request);
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $user = $this->findInstituteUser($id, $instituteId, true, true);
 
         if ((int) $user->id === Auth::id()) {
             return ResponseService::error('You cannot permanently delete your own account', 403);
@@ -233,7 +267,7 @@ private function extractRoleIds(array $validated): array
         return $validated;
     }
 
-    private function syncRolesFromRequest(User $user, array $validated): void
+    private function syncRolesFromRequest(User $user, array $validated, int $instituteId): void
     {
         if (array_key_exists('role_ids', $validated)) {
             $roleIds = $this->normalizeRoleIds($validated['role_ids']);
@@ -243,12 +277,54 @@ private function extractRoleIds(array $validated): array
             return;
         }
 
-        $roleNames = Role::query()
-            ->whereIn('id', $roleIds)
-            ->pluck('name')
-            ->all();
+        $roles = $this->rolesForActiveInstitute($roleIds, $instituteId);
+        if ($roles->count() !== count($roleIds)) {
+            throw new \Exception('Invalid role IDs provided');
+        }
 
-        $user->syncRoles($roleNames);
+        // Do not use syncRoles here: it would remove roles the user holds in
+        // other institutes. Replace only roles belonging to this institute.
+        $user->roles()
+            ->where('roles.institute_id', $instituteId)
+            ->get()
+            ->each(fn (Role $role) => $user->removeRole($role));
+
+        if ($roles->isNotEmpty()) {
+            $user->assignRole($roles);
+        }
+    }
+
+    private function activeInstituteId(Request $request): ?int
+    {
+        $instituteId = InstituteUser::query()
+            ->where('user_id', $request->user()->id)
+            ->where('is_active', true)
+            ->value('institute_id');
+
+        return $instituteId === null ? null : (int) $instituteId;
+    }
+
+    private function findInstituteUser(string $id, int $instituteId, bool $withTrashed = false, bool $onlyTrashed = false): User
+    {
+        $query = User::query()
+            ->where('is_admin', false)
+            ->whereHas('instituteUsers', fn ($query) => $query->where('institute_id', $instituteId));
+
+        if ($onlyTrashed) {
+            $query->onlyTrashed();
+        } elseif ($withTrashed) {
+            $query->withTrashed();
+        }
+
+        return $query->findOrFail($id);
+    }
+
+    private function rolesForActiveInstitute(array $roleIds, int $instituteId)
+    {
+        return Role::query()
+            ->where('institute_id', $instituteId)
+            ->whereIn('id', $roleIds)
+            ->get();
     }
 
     private function normalizeRoleIds(mixed $roles): array
