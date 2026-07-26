@@ -5,6 +5,7 @@ use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\Institute\AcademicSessionController;
 use App\Http\Controllers\Institute\AcademicClassController;
+use App\Http\Controllers\Institute\ClassSubjectController;
 use App\Http\Controllers\Institute\AcademicSectionController;
 use App\Http\Controllers\Institute\InstituteController;
 use App\Http\Controllers\Institute\PermissionController;
@@ -37,6 +38,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::apiResource('institutes/classes', AcademicClassController::class)
         ->parameters(['classes' => 'academic_class']);
+
+    Route::get('institutes/classes/{academic_class}/subjects', [ClassSubjectController::class, 'index'])
+        ->name('institutes.classes.subjects.index');
+    Route::put('institutes/classes/{academic_class}/subjects', [ClassSubjectController::class, 'sync'])
+        ->name('institutes.classes.subjects.sync');
 
     Route::apiResource('institutes/sections', AcademicSectionController::class)
         ->parameters(['sections' => 'academic_section']);

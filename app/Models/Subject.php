@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Subject extends Model
 {
@@ -26,5 +27,11 @@ class Subject extends Model
     public function institute(): BelongsTo
     {
         return $this->belongsTo(Institute::class);
+    }
+
+    public function academicClasses(): BelongsToMany
+    {
+        return $this->belongsToMany(AcademicClass::class, 'class_subject', 'subject_id', 'class_id')
+            ->withTimestamps();
     }
 }
