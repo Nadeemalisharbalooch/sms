@@ -11,6 +11,7 @@ use App\Http\Controllers\Institute\InstituteController;
 use App\Http\Controllers\Institute\PermissionController;
 use App\Http\Controllers\Institute\RoleController;
 use App\Http\Controllers\Institute\SubjectController;
+use App\Http\Controllers\Institute\SubjectTeacherController;
 use App\Http\Controllers\Institute\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -48,6 +49,7 @@ Route::middleware('auth:sanctum')->group(function () {
         ->parameters(['sections' => 'academic_section']);
 
     Route::apiResource('institutes/subjects', SubjectController::class);
+    Route::apiResource('institutes/subject-teachers', SubjectTeacherController::class);
 
     Route::patch('institutes/{institute}/activate', [InstituteController::class, 'activate'])
         ->name('institutes.activate');
