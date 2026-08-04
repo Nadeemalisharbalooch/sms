@@ -1,7 +1,15 @@
 # TODO
 
-- [x] Update UserStoreRequest to validate role_ids / role (and role.* exists)
-- [x] Refactor UserController store() role-sync parsing to match update() logic (or vice-versa) and optionally extract helper
-- [x] Ensure store() unsets role_ids/role before calling update-like logic, and only syncs when role IDs are non-empty
-- [x] PHP lint modified files
-- [x] Run test suite (if present)
+## Section Assign Teacher Module
+
+- [x] Create migration `2026_08_04_000000_create_section_teacher_table.php`
+- [x] Create `SectionTeacher` model with `section()` and `teacher()` relations
+- [x] Add `sectionTeachers()` relation to `AcademicSection` model
+- [x] Add `sectionTeachers()` relation to `User` model
+- [x] Create `StoreSectionTeacherRequest` and `UpdateSectionTeacherRequest`
+- [x] Create `SectionTeacherResource`
+- [x] Create `SectionTeacherController` (full CRUD)
+- [x] Register `institutes/section-teachers` API routes
+- [x] PHP lint all modified files
+- [x] Register routes verified via `php artisan route:list`
+- [ ] Run `php artisan migrate` (blocked: MySQL server not running on port 3306)
