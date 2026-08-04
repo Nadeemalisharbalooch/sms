@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Institute\SyncClassSubjectsRequest;
 use App\Http\Resources\Institute\ClassSubjectResource;
 use App\Models\AcademicClass;
+use App\Models\ClassSubject;
 use App\Models\InstituteUser;
 use App\Models\Subject;
 use App\Services\ResponseService;
@@ -21,8 +22,14 @@ class ClassSubjectController extends Controller
             return ResponseService::notFound('Class not found');
         }
 
+        $classSubjects = ClassSubject::query()
+            ->with(['subject', 'section'])
+            ->where('class_id', $academicClass->id)
+            ->orderBy('id')
+            ->get();
+
         return ResponseService::success(
-            ClassSubjectResource::collection($academicClass->subjects()->orderBy('name')->get()),
+            ClassSubjectResource::collection($classSubjects),
             'Class subjects retrieved successfully'
         );
     }
@@ -53,12 +60,83 @@ class ClassSubjectController extends Controller
             ]);
         }
 
-        $academicClass->subjects()->sync($subjectIds);
+        $requestedSectionId = $request->validated('section_id');
+
+        if ($requestedSectionId !== null) {
+            // A specific section was requested: verify it belongs to this class,
+            // then sync subjects for that section only.
+            $sectionBelongsToClass = $academicClass->sections()
+                ->whereKey($requestedSectionId)
+                ->exists();
+
+            if (! $sectionBelongsToClass) {
+                return ResponseService::error('Validation failed', 422, [
+                    'section_id' => ['The selected section does not belong to this class.'],
+                ]);
+            }
+
+            $this->syncForTarget($academicClass->id, $requestedSectionId, $subjectIds);
+        } else {
+            $sections = $academicClass->sections()->pluck('id');
+
+            if ($sections->isNotEmpty()) {
+                // No section requested and class HAS sections: apply subjects to every section
+                foreach ($sections as $sectionId) {
+                    $this->syncForTarget($academicClass->id, $sectionId, $subjectIds);
+                }
+
+                // Remove any class-level (section_id = null) records for this class
+                ClassSubject::query()
+                    ->where('class_id', $academicClass->id)
+                    ->whereNull('section_id')
+                    ->delete();
+            } else {
+                // Class has NO sections: apply subjects directly to the class (section_id = null)
+                $this->syncForTarget($academicClass->id, null, $subjectIds);
+            }
+        }
+
+        $classSubjects = ClassSubject::query()
+            ->with(['subject', 'section'])
+            ->where('class_id', $academicClass->id)
+            ->orderBy('id')
+            ->get();
 
         return ResponseService::success(
-            ClassSubjectResource::collection($academicClass->subjects()->orderBy('name')->get()),
+            ClassSubjectResource::collection($classSubjects),
             'Class subjects assigned successfully'
         );
+    }
+
+    /**
+     * Sync subject IDs for a specific target (section or class-level).
+     */
+    private function syncForTarget(int $classId, ?int $sectionId, array $subjectIds): void
+    {
+        // Delete records for this target that are no longer in the array
+        ClassSubject::query()
+            ->where('class_id', $classId)
+            ->where('section_id', $sectionId)
+            ->whereNotIn('subject_id', $subjectIds)
+            ->delete();
+
+        // Get existing subject IDs for this target
+        $existingSubjectIds = ClassSubject::query()
+            ->where('class_id', $classId)
+            ->where('section_id', $sectionId)
+            ->pluck('subject_id')
+            ->all();
+
+        // Insert new subject IDs that don't exist yet
+        $newSubjectIds = array_diff($subjectIds, $existingSubjectIds);
+
+        foreach ($newSubjectIds as $subjectId) {
+            ClassSubject::create([
+                'class_id' => $classId,
+                'section_id' => $sectionId,
+                'subject_id' => $subjectId,
+            ]);
+        }
     }
 
     private function activeInstituteId(Request $request): ?int

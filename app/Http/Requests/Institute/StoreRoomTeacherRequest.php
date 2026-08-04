@@ -4,7 +4,7 @@ namespace App\Http\Requests\Institute;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class SyncClassSubjectsRequest extends FormRequest
+class StoreRoomTeacherRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -14,9 +14,10 @@ class SyncClassSubjectsRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'session_id' => ['required', 'integer', 'exists:academic_sessions,id'],
+            'class_id' => ['required', 'integer', 'exists:classes,id'],
             'section_id' => ['nullable', 'integer', 'exists:sections,id'],
-            'subject_ids' => ['required', 'array'],
-            'subject_ids.*' => ['required', 'integer', 'distinct', 'exists:subjects,id'],
+            'teacher_id' => ['required', 'integer', 'exists:users,id'],
         ];
     }
 }

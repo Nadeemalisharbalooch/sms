@@ -48,6 +48,16 @@ class User extends Authenticatable
         return $this->hasMany(SectionTeacher::class, 'teacher_id');
     }
 
+    public function subjectAllocations(): HasMany
+    {
+        return $this->hasMany(SubjectAllocation::class, 'teacher_user_id');
+    }
+
+    public function roomTeachers(): HasMany
+    {
+        return $this->hasMany(RoomTeacher::class, 'teacher_user_id');
+    }
+
     // If you want to restrict to certain role types/guards later, you can customize here.
     // For now, default Spatie behavior is used.
 }

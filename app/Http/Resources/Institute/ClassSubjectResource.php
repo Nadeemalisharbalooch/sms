@@ -11,10 +11,23 @@ class ClassSubjectResource extends JsonResource
     {
         return [
             'id' => $this->id,
-            'name' => $this->name,
-            'code' => $this->code,
-            'description' => $this->description,
-            'is_active' => $this->is_active,
+            'class_id' => $this->class_id,
+            'section_id' => $this->section_id,
+            'subject_id' => $this->subject_id,
+            'subject' => $this->whenLoaded('subject', fn () => [
+                'id' => $this->subject->id,
+                'name' => $this->subject->name,
+                'code' => $this->subject->code,
+                'description' => $this->subject->description,
+                'is_active' => $this->subject->is_active,
+            ]),
+            'section' => $this->whenLoaded('section', fn () => [
+                'id' => $this->section->id,
+                'name' => $this->section->name,
+                'code' => $this->section->code,
+            ]),
+            'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at,
         ];
     }
 }
