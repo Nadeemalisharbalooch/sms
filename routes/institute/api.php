@@ -18,7 +18,7 @@ use App\Http\Controllers\Institute\RoomTeacherController;
 use App\Http\Controllers\Institute\UserController;
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('institutes')->group(function () {
+$instituteResources = function () {
     Route::middleware('auth:sanctum')->group(function () {
 
         // Resources
@@ -34,7 +34,10 @@ Route::prefix('institutes')->group(function () {
         Route::delete('/users/{id}/force-delete', [UserController::class, 'forceDestroy'])
             ->name('users.forceDestroy');
     });
-});
+};
+
+Route::prefix('institutes')->group($instituteResources);
+Route::prefix('institute')->group($instituteResources);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('institutes/academic-sessions', AcademicSessionController::class)
@@ -51,7 +54,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('institutes/sections', AcademicSectionController::class)
         ->parameters(['sections' => 'academic_section']);
 
-Route::apiResource('institutes/subjects', SubjectController::class);
+    Route::apiResource('institutes/subjects', SubjectController::class);
     Route::apiResource('institutes/subject-teachers', SubjectTeacherController::class);
     Route::apiResource('institutes/section-teachers', SectionTeacherController::class);
 
