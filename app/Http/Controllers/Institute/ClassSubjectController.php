@@ -116,14 +116,14 @@ class ClassSubjectController extends Controller
         // Delete records for this target that are no longer in the array
         ClassSubject::query()
             ->where('class_id', $classId)
-            ->where('section_id', $sectionId)
+            ->when($sectionId === null, fn ($query) => $query->whereNull('section_id'), fn ($query) => $query->where('section_id', $sectionId))
             ->whereNotIn('subject_id', $subjectIds)
             ->delete();
 
         // Get existing subject IDs for this target
         $existingSubjectIds = ClassSubject::query()
             ->where('class_id', $classId)
-            ->where('section_id', $sectionId)
+            ->when($sectionId === null, fn ($query) => $query->whereNull('section_id'), fn ($query) => $query->where('section_id', $sectionId))
             ->pluck('subject_id')
             ->all();
 

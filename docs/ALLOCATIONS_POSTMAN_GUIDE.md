@@ -30,45 +30,30 @@ POST http://sms.test/api/institutes/classes/1/subjects
 
 ### Request Body (JSON)
 
+**Option 1: Assign to a SPECIFIC section:**
+
+```json
+{
+  "section_id": 1,
+  "subject_ids": [1, 2, 5, 8]
+}
+```
+
+**Option 2: Assign to ALL sections (or class if no sections exist):**
+
 ```json
 {
   "subject_ids": [1, 2, 5, 8]
 }
 ```
 
-### Response (Success)
-
-```json
-{
-  "status": "success",
-  "message": "Class subjects assigned successfully",
-  "data": [
-    {
-      "id": 1,
-      "class_id": 1,
-      "section_id": null,
-      "subject_id": 1,
-      "subject": {
-        "id": 1,
-        "name": "Mathematics",
-        "code": "MATH",
-        "description": null,
-        "is_active": true
-      },
-      "section": null,
-      "created_at": "2026-08-04T00:00:00.000000Z",
-      "updated_at": "2026-08-04T00:00:00.000000Z"
-    }
-  ]
-}
-```
-
 ### Behavior
 
-| Scenario | Result |
+| Payload | Result |
 | --- | --- |
-| Class has sections (e.g., A, B) | Subject IDs assigned to EACH section (`section_id = 1`, `section_id = 2`) |
-| Class has NO sections | Subject IDs assigned directly to class (`section_id = null`) |
+| `section_id` provided | Subjects assigned to ONLY that section (`section_id = 1`) |
+| No `section_id` + class HAS sections | Subjects assigned to EACH section (`section_id = 1`, `section_id = 2`) |
+| No `section_id` + class has NO sections | Subjects assigned directly to class (`section_id = null`) |
 | Subject ID removed in next request | Deleted from database for that class/section |
 
 ### Get Assigned Subjects
@@ -288,7 +273,7 @@ DELETE http://sms.test/api/institutes/allocations/room-teachers/{id}
 
 | Module | Method | URL | Body |
 | --- | --- | --- | --- |
-| 1. Class Subjects | POST | `/institutes/classes/{class_id}/subjects` | `{ "subject_ids": [1, 2, 5] }` |
+| 1. Class Subjects | POST | `/institutes/classes/{class_id}/subjects` | `{ "section_id": 1, "subject_ids": [1, 2, 5] }` (section_id optional) |
 | 1. Get Class Subjects | GET | `/institutes/classes/{class_id}/subjects` | — |
 | 2. Subject Teachers | POST | `/institutes/allocations/subject-teachers` | `{ "session_id": 1, "class_id": 3, "section_id": 2, "allocations": [{ "subject_id": 1, "teacher_id": 5 }] }` |
 | 2. List Subject Teachers | GET | `/institutes/allocations/subject-teachers` | — |
@@ -340,4 +325,5 @@ DELETE http://sms.test/api/institutes/allocations/room-teachers/{id}
 1. **Authentication:** Har request ke saath `Authorization: Bearer {token}` send karein.
 2. **Institute:** Backend logged-in user ka active institute automatically find karta hai. `institute_id` send nahi karna.
 3. **Validation:** Teachers ka role `Teacher` hona chahiye aur institute user active hona chahiye.
-4. **Section Logic:** Agar class ke sections hain, backend automatically sections pe apply karta hai. Frontend ko `section_id` sirf Module 2 aur 3 mein bhejna hai (agar sections hain), warna `null` bhejna hai.
+4. **Section Logic (Module 1):** `section_id` optional hai. Agar bheja jaye to sirf us section pe apply hota hai. Agar nahi bheja aur class ke sections hain to har section pe apply hota hai. Agar class ke sections nahi hain to class pe (`section_id = null`) apply hota hai.
+5. **Section Logic (Modules 2 & 3):** `section_id` bhejna hai agar class ke sections hain, warna `null` bhejna hai.
