@@ -18,8 +18,8 @@ use App\Http\Controllers\Institute\RoomTeacherController;
 use App\Http\Controllers\Institute\UserController;
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('institute')->group(function () {
-Route::middleware('auth:sanctum')->group(function (){
+Route::prefix('institutes')->group(function () {
+    Route::middleware('auth:sanctum')->group(function () {
 
         // Resources
 
@@ -30,10 +30,10 @@ Route::middleware('auth:sanctum')->group(function (){
         Route::apiResource('users', UserController::class);
         Route::patch('/users/{id}/restore', [UserController::class, 'restore'])
             ->name('users.restore');
-        Route::apiResource('permissions',PermissionController::class);
+        Route::apiResource('permissions', PermissionController::class);
         Route::delete('/users/{id}/force-delete', [UserController::class, 'forceDestroy'])
-    ->name('users.forceDestroy');
-});
+            ->name('users.forceDestroy');
+    });
 });
 
 Route::middleware('auth:sanctum')->group(function () {

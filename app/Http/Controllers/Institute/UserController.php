@@ -20,6 +20,7 @@ class UserController extends Controller
      */
     public function currentPermissions(Request $request)
     {
+      
         $instituteId = InstituteUser::query()
             ->where('user_id', $request->user()->id)
             ->where('is_active', true)
@@ -66,6 +67,7 @@ class UserController extends Controller
      */
     public function index(Request $request)
     {
+        
         $instituteId = $this->activeInstituteId($request);
 
         if ($instituteId === null) {
@@ -92,6 +94,7 @@ class UserController extends Controller
      */
 public function store(UserStoreRequest $request)
 {
+    
     $validated = $request->validated();
     $userData = $this->userData($validated);
     $userData['is_accept_terms'] = true;
