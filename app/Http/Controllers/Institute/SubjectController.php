@@ -24,7 +24,7 @@ class SubjectController extends Controller
         $subjects = Subject::query()
             ->where('institute_id', $instituteId)
             ->orderBy('name')
-            ->paginate();
+            ->get();
 
         return ResponseService::success(
             SubjectResource::collection($subjects),
