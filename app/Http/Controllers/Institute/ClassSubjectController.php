@@ -34,6 +34,26 @@ class ClassSubjectController extends Controller
         );
     }
 
+    public function destroy(Request $request, string $academicClass, string $subject)
+    {
+        $academicClass = $this->activeClass($request, $academicClass);
+
+        if ($academicClass === null) {
+            return ResponseService::notFound('Class not found');
+        }
+
+        $deleted = ClassSubject::query()
+            ->where('class_id', $academicClass->id)
+            ->where('subject_id', $subject)
+            ->delete();
+
+        if ($deleted === 0) {
+            return ResponseService::notFound('Subject not found in this class');
+        }
+
+        return ResponseService::success(null, 'Subject removed from class successfully');
+    }
+
     public function sync(SyncClassSubjectsRequest $request, string $academicClass)
     {
         $instituteId = $this->activeInstituteId($request);
