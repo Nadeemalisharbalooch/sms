@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Institute;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Institute\StoreSubjectTeacherRequest;
-use App\Http\Requests\Institute\UpdateSubjectTeacherRequest;
-use App\Http\Resources\Institute\SubjectTeacherResource;
+use App\Http\Resources\Institute\SubjectAllocationResource;
+use App\Models\AcademicClass;
+use App\Models\AcademicSection;
+use App\Models\AcademicSession;
 use App\Models\InstituteUser;
 use App\Models\Subject;
-use App\Models\SubjectTeacher;
+use App\Models\SubjectAllocation;
 use App\Models\User;
 use App\Services\ResponseService;
 use Illuminate\Http\Request;
@@ -23,17 +25,19 @@ class SubjectTeacherController extends Controller
             return ResponseService::error('No active institute is associated with this user', 422);
         }
 
-        $assignments = SubjectTeacher::query()
-            ->with(['subject', 'teacher'])
-            ->whereHas('subject', fn ($query) => $query->where('institute_id', $instituteId))
+        $allocations = SubjectAllocation::query()
+            ->with(['session', 'academicClass', 'section', 'subject', 'teacher'])
+            ->whereHas('academicClass', fn ($query) => $query->where('institute_id', $instituteId))
+            ->when($request->integer('session_id'), fn ($query, int $sessionId) => $query->where('session_id', $sessionId))
+            ->when($request->integer('class_id'), fn ($query, int $classId) => $query->where('class_id', $classId))
+            ->when($request->integer('section_id'), fn ($query, int $sectionId) => $query->where('section_id', $sectionId))
             ->when($request->integer('subject_id'), fn ($query, int $subjectId) => $query->where('subject_id', $subjectId))
-            ->when($request->integer('teacher_id'), fn ($query, int $teacherId) => $query->where('teacher_id', $teacherId))
             ->latest()
-            ->paginate();
+            ->get();
 
         return ResponseService::success(
-            SubjectTeacherResource::collection($assignments),
-            'Subject teacher assignments retrieved successfully'
+            SubjectAllocationResource::collection($allocations),
+            'Subject teacher allocations retrieved successfully'
         );
     }
 
@@ -46,90 +50,119 @@ class SubjectTeacherController extends Controller
         }
 
         $validated = $request->validated();
-        $error = $this->assignmentError($validated, $instituteId);
+        $error = $this->allocationError($validated, $instituteId);
 
         if ($error !== null) {
             return $error;
         }
 
-        if (SubjectTeacher::query()->where($validated)->exists()) {
-            return ResponseService::error('Validation failed', 422, [
-                'teacher_id' => ['This teacher is already assigned to this subject.'],
-            ]);
+        $created = [];
+
+        foreach ($validated['allocations'] as $allocation) {
+            $record = SubjectAllocation::updateOrCreate(
+                [
+                    'session_id' => $validated['session_id'],
+                    'class_id' => $validated['class_id'],
+                    'section_id' => $validated['section_id'],
+                    'subject_id' => $allocation['subject_id'],
+                ],
+                [
+                    'teacher_user_id' => $allocation['teacher_id'],
+                ]
+            );
+
+            $created[] = $record;
         }
 
-        $assignment = SubjectTeacher::create($validated)->load(['subject', 'teacher']);
+        $created = \Illuminate\Database\Eloquent\Collection::make($created)
+            ->load(['session', 'academicClass', 'section', 'subject', 'teacher']);
 
         return ResponseService::success(
-            new SubjectTeacherResource($assignment),
-            'Teacher assigned to subject successfully',
+            SubjectAllocationResource::collection($created),
+            'Subject teachers assigned successfully',
             201
         );
     }
 
-    public function show(Request $request, SubjectTeacher $subjectTeacher)
+    public function show(Request $request, SubjectAllocation $subjectAllocation)
     {
-        if (! $this->belongsToActiveInstitute($request, $subjectTeacher)) {
-            return ResponseService::notFound('Subject teacher assignment not found');
+        if (! $this->belongsToActiveInstitute($request, $subjectAllocation)) {
+            return ResponseService::notFound('Subject allocation not found');
         }
 
         return ResponseService::success(
-            new SubjectTeacherResource($subjectTeacher->load(['subject', 'teacher'])),
-            'Subject teacher assignment retrieved successfully'
+            new SubjectAllocationResource($subjectAllocation->load(['session', 'academicClass', 'section', 'subject', 'teacher'])),
+            'Subject allocation retrieved successfully'
         );
     }
 
-    public function update(UpdateSubjectTeacherRequest $request, SubjectTeacher $subjectTeacher)
+    public function destroy(Request $request, SubjectAllocation $subjectAllocation)
     {
-        if (! $this->belongsToActiveInstitute($request, $subjectTeacher)) {
-            return ResponseService::notFound('Subject teacher assignment not found');
+        if (! $this->belongsToActiveInstitute($request, $subjectAllocation)) {
+            return ResponseService::notFound('Subject allocation not found');
         }
 
-        $instituteId = $this->activeInstituteId($request);
-        $validated = $request->validated();
-        $error = $this->assignmentError($validated, $instituteId);
+        $subjectAllocation->delete();
 
-        if ($error !== null) {
-            return $error;
-        }
-
-        if (SubjectTeacher::query()->where($validated)->where('id', '!=', $subjectTeacher->id)->exists()) {
-            return ResponseService::error('Validation failed', 422, [
-                'teacher_id' => ['This teacher is already assigned to this subject.'],
-            ]);
-        }
-
-        $subjectTeacher->update($validated);
-
-        return ResponseService::success(
-            new SubjectTeacherResource($subjectTeacher->fresh()->load(['subject', 'teacher'])),
-            'Subject teacher assignment updated successfully'
-        );
+        return ResponseService::success(null, 'Subject allocation removed successfully');
     }
 
-    public function destroy(Request $request, SubjectTeacher $subjectTeacher)
+    private function allocationError(array $validated, int $instituteId): ?\Illuminate\Http\JsonResponse
     {
-        if (! $this->belongsToActiveInstitute($request, $subjectTeacher)) {
-            return ResponseService::notFound('Subject teacher assignment not found');
-        }
-
-        $subjectTeacher->delete();
-
-        return ResponseService::success(null, 'Teacher removed from subject successfully');
-    }
-
-    private function assignmentError(array $validated, int $instituteId): ?\Illuminate\Http\JsonResponse
-    {
-        if (! Subject::query()->whereKey($validated['subject_id'])->where('institute_id', $instituteId)->exists()) {
+        // Validate session belongs to the active institute
+        if (! AcademicSession::query()
+            ->whereKey($validated['session_id'])
+            ->where('institute_id', $instituteId)
+            ->exists()) {
             return ResponseService::error('Validation failed', 422, [
-                'subject_id' => ['The selected subject must belong to the active institute.'],
+                'session_id' => ['The selected session must belong to the active institute.'],
             ]);
         }
 
-        if (! $this->isInstituteTeacher($validated['teacher_id'], $instituteId)) {
+        // Validate class belongs to the active institute
+        if (! AcademicClass::query()
+            ->whereKey($validated['class_id'])
+            ->where('institute_id', $instituteId)
+            ->exists()) {
             return ResponseService::error('Validation failed', 422, [
-                'teacher_id' => ['The selected user must be an active Teacher in the active institute.'],
+                'class_id' => ['The selected class must belong to the active institute.'],
             ]);
+        }
+
+        // Validate section (if provided) belongs to the class
+        if ($validated['section_id'] !== null) {
+            if (! AcademicSection::query()
+                ->whereKey($validated['section_id'])
+                ->where('class_id', $validated['class_id'])
+                ->exists()) {
+                return ResponseService::error('Validation failed', 422, [
+                    'section_id' => ['The selected section must belong to the selected class.'],
+                ]);
+            }
+        }
+
+        // Validate each subject belongs to the active institute
+        $subjectIds = array_column($validated['allocations'], 'subject_id');
+        $subjectsCount = Subject::query()
+            ->where('institute_id', $instituteId)
+            ->whereIn('id', $subjectIds)
+            ->count();
+
+        if ($subjectsCount !== count($subjectIds)) {
+            return ResponseService::error('Validation failed', 422, [
+                'allocations' => ['Every subject must belong to the active institute.'],
+            ]);
+        }
+
+        // Validate each teacher exists and has the correct role
+        $teacherIds = array_column($validated['allocations'], 'teacher_id');
+
+        foreach ($teacherIds as $teacherId) {
+            if (! $this->isInstituteTeacher($teacherId, $instituteId)) {
+                return ResponseService::error('Validation failed', 422, [
+                    'allocations' => ['Every teacher must be an active Teacher in the active institute.'],
+                ]);
+            }
         }
 
         return null;
@@ -145,12 +178,12 @@ class SubjectTeacherController extends Controller
         return $instituteId === null ? null : (int) $instituteId;
     }
 
-    private function belongsToActiveInstitute(Request $request, SubjectTeacher $subjectTeacher): bool
+    private function belongsToActiveInstitute(Request $request, SubjectAllocation $subjectAllocation): bool
     {
         $instituteId = $this->activeInstituteId($request);
 
         return $instituteId !== null
-            && $subjectTeacher->subject()->where('institute_id', $instituteId)->exists();
+            && $subjectAllocation->academicClass()->where('institute_id', $instituteId)->exists();
     }
 
     private function isInstituteTeacher(int $teacherId, int $instituteId): bool

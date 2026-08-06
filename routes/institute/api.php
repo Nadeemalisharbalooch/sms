@@ -57,17 +57,26 @@ Route::middleware('auth:sanctum')->group(function () {
         ->parameters(['sections' => 'academic_section']);
 
     Route::apiResource('institutes/subjects', SubjectController::class);
-    Route::apiResource('institutes/subject-teachers', SubjectTeacherController::class);
     Route::apiResource('institutes/section-teachers', SectionTeacherController::class);
 
+    // Module 2: Subject Teacher Allocations (also available at /subject-teachers)
+    Route::get('institutes/subject-teachers', [SubjectTeacherController::class, 'index'])
+        ->name('institutes.subject-teachers.index');
+    Route::post('institutes/subject-teachers', [SubjectTeacherController::class, 'store'])
+        ->name('institutes.subject-teachers.store');
+    Route::get('institutes/subject-teachers/{subject_allocation}', [SubjectTeacherController::class, 'show'])
+        ->name('institutes.subject-teachers.show');
+    Route::delete('institutes/subject-teachers/{subject_allocation}', [SubjectTeacherController::class, 'destroy'])
+        ->name('institutes.subject-teachers.destroy');
+
     // Module 2: Subject Teacher Allocations
-    Route::get('institutes/allocations/subject-teachers', [SubjectAllocationController::class, 'index'])
+    Route::get('institutes/allocations/subject-teachers', [SubjectTeacherController::class, 'index'])
         ->name('institutes.allocations.subject-teachers.index');
-    Route::post('institutes/allocations/subject-teachers', [SubjectAllocationController::class, 'store'])
+    Route::post('institutes/allocations/subject-teachers', [SubjectTeacherController::class, 'store'])
         ->name('institutes.allocations.subject-teachers.store');
-    Route::get('institutes/allocations/subject-teachers/{subject_allocation}', [SubjectAllocationController::class, 'show'])
+    Route::get('institutes/allocations/subject-teachers/{subject_allocation}', [SubjectTeacherController::class, 'show'])
         ->name('institutes.allocations.subject-teachers.show');
-    Route::delete('institutes/allocations/subject-teachers/{subject_allocation}', [SubjectAllocationController::class, 'destroy'])
+    Route::delete('institutes/allocations/subject-teachers/{subject_allocation}', [SubjectTeacherController::class, 'destroy'])
         ->name('institutes.allocations.subject-teachers.destroy');
 
     // Module 3: Room Teacher (Homeroom) Allocations
