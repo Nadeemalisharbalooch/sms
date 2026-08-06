@@ -23,10 +23,12 @@ class ClassSubjectController extends Controller
         }
 
         $classSubjects = ClassSubject::query()
-            ->with(['subject', 'section'])
+            ->with('subject')
             ->where('class_id', $academicClass->id)
             ->orderBy('id')
-            ->get();
+            ->get()
+            ->unique('subject_id')
+            ->values();
 
         return ResponseService::success(
             ClassSubjectResource::collection($classSubjects),
@@ -117,10 +119,12 @@ class ClassSubjectController extends Controller
         }
 
         $classSubjects = ClassSubject::query()
-            ->with(['subject', 'section'])
+            ->with('subject')
             ->where('class_id', $academicClass->id)
             ->orderBy('id')
-            ->get();
+            ->get()
+            ->unique('subject_id')
+            ->values();
 
         return ResponseService::success(
             ClassSubjectResource::collection($classSubjects),
