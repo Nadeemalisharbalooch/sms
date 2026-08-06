@@ -15,7 +15,7 @@ class SyncClassSubjectsRequest extends FormRequest
     {
         return [
             'section_id' => ['nullable', 'integer', 'exists:sections,id'],
-            'subject_ids' => ['required', 'array'],
+            'subject_ids' => ['present', 'array'],
             'subject_ids.*' => ['required', 'integer', 'distinct', 'exists:subjects,id'],
         ];
     }

@@ -137,12 +137,19 @@ class ClassSubjectController extends Controller
      */
     private function syncForTarget(int $classId, ?int $sectionId, array $subjectIds): void
     {
-        // Delete records for this target that are no longer in the array
-        ClassSubject::query()
+        $targetQuery = ClassSubject::query()
             ->where('class_id', $classId)
-            ->when($sectionId === null, fn ($query) => $query->whereNull('section_id'), fn ($query) => $query->where('section_id', $sectionId))
-            ->whereNotIn('subject_id', $subjectIds)
-            ->delete();
+            ->when($sectionId === null, fn ($query) => $query->whereNull('section_id'), fn ($query) => $query->where('section_id', $sectionId));
+
+        // Empty array = remove all subjects for this target
+        if (empty($subjectIds)) {
+            $targetQuery->delete();
+
+            return;
+        }
+
+        // Delete records for this target that are no longer in the array
+        $targetQuery->whereNotIn('subject_id', $subjectIds)->delete();
 
         // Get existing subject IDs for this target
         $existingSubjectIds = ClassSubject::query()

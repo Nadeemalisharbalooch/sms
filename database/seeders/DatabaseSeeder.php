@@ -18,6 +18,9 @@ class DatabaseSeeder extends Seeder
         // Seed permissions + roles.
         $this->call(AppPermissionsSeeder::class);
 
+        // Seed common subjects for institutes.
+        $this->call(SubjectSeeder::class);
+
         // Avoid duplicate seed failures (idempotent).
         User::updateOrCreate(
             ['email' => 'test@example.com'],
