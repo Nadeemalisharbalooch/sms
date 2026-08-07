@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Institute;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Institute\StoreSubjectAllocationRequest;
+use App\Http\Resources\Institute\AcademicClassResource;
 use App\Http\Resources\Institute\SubjectAllocationResource;
 use App\Models\AcademicClass;
 use App\Models\AcademicSection;
@@ -93,6 +94,29 @@ class SubjectAllocationController extends Controller
         return ResponseService::success(
             new SubjectAllocationResource($subjectAllocation->load(['session', 'academicClass', 'section', 'subject', 'teacher'])),
             'Subject allocation retrieved successfully'
+        );
+    }
+
+    public function classBySection(Request $request, int $sectionId)
+    {
+        $instituteId = $this->activeInstituteId($request);
+
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $class = AcademicClass::query()
+            ->where('institute_id', $instituteId)
+            ->whereHas('sections', fn ($query) => $query->whereKey($sectionId))
+            ->first();
+
+        if ($class === null) {
+            return ResponseService::notFound('Class not found for the given section');
+        }
+
+        return ResponseService::success(
+            new AcademicClassResource($class),
+            'Class retrieved successfully'
         );
     }
 
