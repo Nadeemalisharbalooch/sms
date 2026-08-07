@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Institute;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Institute\StoreAcademicSectionRequest;
 use App\Http\Requests\Institute\UpdateAcademicSectionRequest;
+use App\Http\Resources\Institute\AcademicClassResource;
 use App\Http\Resources\Institute\AcademicSectionResource;
 use App\Models\AcademicClass;
 use App\Models\AcademicSection;
@@ -75,6 +76,26 @@ class AcademicSectionController extends Controller
         return ResponseService::success(
             new AcademicSectionResource($academicSection),
             'Section retrieved successfully'
+        );
+    }
+
+    public function classes(Request $request, AcademicSection $academicSection)
+    {
+        if (! $this->belongsToActiveInstitute($request, $academicSection)) {
+            return ResponseService::notFound('Section not found');
+        }
+
+        $academicClass = $academicSection->academicClass()
+            ->where('institute_id', $this->activeInstituteId($request))
+            ->first();
+
+        if ($academicClass === null) {
+            return ResponseService::notFound('Class not found');
+        }
+
+        return ResponseService::success(
+            new AcademicClassResource($academicClass),
+            'Class retrieved successfully'
         );
     }
 

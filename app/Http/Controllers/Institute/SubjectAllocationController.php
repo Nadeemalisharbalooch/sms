@@ -74,7 +74,8 @@ class SubjectAllocationController extends Controller
             $created[] = $record;
         }
 
-        $created = collect($created)->load(['session', 'academicClass', 'section', 'subject', 'teacher']);
+        $created = \Illuminate\Database\Eloquent\Collection::make($created)
+            ->load(['session', 'academicClass', 'section', 'subject', 'teacher']);
 
         return ResponseService::success(
             SubjectAllocationResource::collection($created),

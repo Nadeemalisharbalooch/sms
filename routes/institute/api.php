@@ -56,6 +56,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('institutes/sections', AcademicSectionController::class)
         ->parameters(['sections' => 'academic_section']);
 
+    Route::get('institutes/sections/{academic_section}/classes', [AcademicSectionController::class, 'classes'])
+        ->name('institutes.sections.classes');
+
     Route::apiResource('institutes/subjects', SubjectController::class);
     Route::apiResource('institutes/section-teachers', SectionTeacherController::class);
 
