@@ -48,6 +48,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('institutes/classes/{academic_class}/subjects', [ClassSubjectController::class, 'index'])
         ->name('institutes.classes.subjects.index');
+    Route::get('institutes/classes/{academic_class}/subjects/unassigned', [ClassSubjectController::class, 'unassigned'])
+        ->name('institutes.classes.subjects.unassigned');
     Route::post('institutes/classes/{academic_class}/subjects', [ClassSubjectController::class, 'sync'])
         ->name('institutes.classes.subjects.sync');
     Route::delete('institutes/classes/{academic_class}/subjects/{subject}', [ClassSubjectController::class, 'destroy'])

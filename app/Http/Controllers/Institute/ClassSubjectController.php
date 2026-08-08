@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Institute\SyncClassSubjectsRequest;
 use App\Http\Resources\Institute\ClassSubjectResource;
 use App\Models\AcademicClass;
+use App\Models\AcademicSession;
 use App\Models\ClassSubject;
 use App\Models\InstituteUser;
 use App\Models\Subject;
+use App\Models\SubjectAllocation;
 use App\Services\ResponseService;
 use Illuminate\Http\Request;
 
@@ -33,6 +35,58 @@ class ClassSubjectController extends Controller
         return ResponseService::success(
             ClassSubjectResource::collection($classSubjects),
             'Class subjects retrieved successfully'
+        );
+    }
+
+    public function unassigned(Request $request, string $academicClass)
+    {
+        $academicClass = $this->activeClass($request, $academicClass);
+
+        if ($academicClass === null) {
+            return ResponseService::notFound('Class not found');
+        }
+
+        $sectionId = $request->input('section_id');
+
+        if ($sectionId === null) {
+            return ResponseService::error('Validation failed', 422, [
+                'section_id' => ['The section_id field is required.'],
+            ]);
+        }
+
+        // Get the active session for this institute
+        $instituteId = $this->activeInstituteId($request);
+        $activeSessionId = AcademicSession::query()
+            ->where('institute_id', $instituteId)
+            ->where('is_active', true)
+            ->value('id');
+
+        $classSubjectsQuery = ClassSubject::query()
+            ->with('subject')
+            ->where('class_id', $academicClass->id)
+            ->where('section_id', $sectionId);
+
+        if ($activeSessionId !== null) {
+            // Get subject IDs that already have a teacher assigned for this class/section in the active session
+            $assignedSubjectIds = SubjectAllocation::query()
+                ->where('session_id', $activeSessionId)
+                ->where('class_id', $academicClass->id)
+                ->where('section_id', $sectionId)
+                ->pluck('subject_id');
+
+            // Only return subjects that do NOT have a teacher assigned
+            $classSubjectsQuery->whereNotIn('subject_id', $assignedSubjectIds);
+        }
+
+        $classSubjects = $classSubjectsQuery
+            ->orderBy('id')
+            ->get()
+            ->unique('subject_id')
+            ->values();
+
+        return ResponseService::success(
+            ClassSubjectResource::collection($classSubjects),
+            'Unassigned section subjects retrieved successfully'
         );
     }
 
