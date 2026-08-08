@@ -5,11 +5,12 @@ namespace App\Http\Controllers\Institute;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Institute\StoreAcademicSectionRequest;
 use App\Http\Requests\Institute\UpdateAcademicSectionRequest;
-use App\Http\Resources\Institute\AcademicClassResource;
 use App\Http\Resources\Institute\AcademicSectionResource;
+use App\Http\Resources\Institute\SubjectResource;
 use App\Models\AcademicClass;
 use App\Models\AcademicSection;
 use App\Models\InstituteUser;
+use App\Models\SubjectAllocation;
 use App\Services\ResponseService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -85,17 +86,19 @@ class AcademicSectionController extends Controller
             return ResponseService::notFound('Section not found');
         }
 
-        $academicClass = $academicSection->academicClass()
-            ->where('institute_id', $this->activeInstituteId($request))
-            ->first();
-
-        if ($academicClass === null) {
-            return ResponseService::notFound('Class not found');
-        }
+        $subjects = SubjectAllocation::query()
+            ->with('subject')
+            ->where('class_id', $academicSection->class_id)
+            ->where('section_id', $academicSection->id)
+            ->when($request->integer('session_id'), fn ($query, int $sessionId) => $query->where('session_id', $sessionId))
+            ->get()
+            ->unique('subject_id')
+            ->map(fn (SubjectAllocation $allocation) => $allocation->subject)
+            ->values();
 
         return ResponseService::success(
-            new AcademicClassResource($academicClass),
-            'Class retrieved successfully'
+            SubjectResource::collection($subjects),
+            'Subjects retrieved successfully'
         );
     }
 

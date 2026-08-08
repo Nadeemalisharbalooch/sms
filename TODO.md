@@ -13,3 +13,7 @@
 - [x] PHP lint all modified files
 - [x] Register routes verified via `php artisan route:list`
 - [ ] Run `php artisan migrate` (blocked: MySQL server not running on port 3306)
+
+## Section Subjects Endpoint
+
+- [x] Modify `AcademicSectionController@classes` to return the subjects assigned to the section via `class_subjects` (filtered by class_id + section_id), using `ClassSubjectResource`
