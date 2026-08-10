@@ -21,6 +21,11 @@ class ClassSubjectResource extends JsonResource
                 'description' => $this->subject->description,
                 'is_active' => $this->subject->is_active,
             ]),
+            'teacher' => $this->whenLoaded('allocation', fn () => $this->allocation ? [
+                'id' => $this->allocation->teacher->id,
+                'name' => $this->allocation->teacher->name,
+                'email' => $this->allocation->teacher->email,
+            ] : null),
             // 'section' => $this->whenLoaded('section', fn () => [
             //     'id' => $this->section->id,
             //     'name' => $this->section->name,

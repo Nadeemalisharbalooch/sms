@@ -66,27 +66,31 @@ class ClassSubjectController extends Controller
             ->where('class_id', $academicClass->id)
             ->where('section_id', $sectionId);
 
-        if ($activeSessionId !== null) {
-            // Get subject IDs that already have a teacher assigned for this class/section in the active session
-            $assignedSubjectIds = SubjectAllocation::query()
-                ->where('session_id', $activeSessionId)
-                ->where('class_id', $academicClass->id)
-                ->where('section_id', $sectionId)
-                ->pluck('subject_id');
-
-            // Only return subjects that do NOT have a teacher assigned
-            $classSubjectsQuery->whereNotIn('subject_id', $assignedSubjectIds);
-        }
-
         $classSubjects = $classSubjectsQuery
             ->orderBy('id')
             ->get()
             ->unique('subject_id')
             ->values();
 
+        if ($activeSessionId !== null) {
+            // Load teacher allocations for this class/section in the active session
+            $allocations = SubjectAllocation::query()
+                ->with('teacher')
+                ->where('session_id', $activeSessionId)
+                ->where('class_id', $academicClass->id)
+                ->where('section_id', $sectionId)
+                ->get()
+                ->keyBy('subject_id');
+
+            // Attach the allocation (with teacher) to each class subject
+            foreach ($classSubjects as $classSubject) {
+                $classSubject->setRelation('allocation', $allocations->get($classSubject->subject_id));
+            }
+        }
+
         return ResponseService::success(
             ClassSubjectResource::collection($classSubjects),
-            'Unassigned section subjects retrieved successfully'
+            'Section subjects retrieved successfully'
         );
     }
 
