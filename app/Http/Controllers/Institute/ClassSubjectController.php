@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Institute\SyncClassSubjectsRequest;
 use App\Http\Resources\Institute\ClassSubjectResource;
 use App\Models\AcademicClass;
-use App\Models\AcademicSession;
 use App\Models\ClassSubject;
 use App\Models\InstituteUser;
 use App\Models\Subject;
@@ -24,6 +23,7 @@ class ClassSubjectController extends Controller
             return ResponseService::notFound('Class not found');
         }
 
+        $sessionId = $request->input('session_id');
         $sectionId = $request->input('section_id');
 
         $classSubjectsQuery = ClassSubject::query()
@@ -40,33 +40,19 @@ class ClassSubjectController extends Controller
             ->unique('subject_id')
             ->values();
 
-        if ($sectionId !== null) {
-            // Get the session for this institute (either provided session_id or active session)
-            $instituteId = $this->activeInstituteId($request);
-            $sessionId = $request->input('session_id');
+        if ($sessionId !== null) {
+            // Load teacher allocations for this class/section in the specified session
+            $allocations = SubjectAllocation::query()
+                ->with('teacher')
+                ->where('session_id', $sessionId)
+                ->where('class_id', $academicClass->id)
+                ->when($sectionId !== null, fn ($query) => $query->where('section_id', $sectionId))
+                ->get()
+                ->keyBy('subject_id');
 
-            if ($sessionId === null) {
-                // Fall back to the active session
-                $sessionId = AcademicSession::query()
-                    ->where('institute_id', $instituteId)
-                    ->where('is_active', true)
-                    ->value('id');
-            }
-
-            if ($sessionId !== null) {
-                // Load teacher allocations for this class/section in the specified session
-                $allocations = SubjectAllocation::query()
-                    ->with('teacher')
-                    ->where('session_id', $sessionId)
-                    ->where('class_id', $academicClass->id)
-                    ->where('section_id', $sectionId)
-                    ->get()
-                    ->keyBy('subject_id');
-
-                // Attach the allocation (with teacher) to each class subject
-                foreach ($classSubjects as $classSubject) {
-                    $classSubject->setRelation('allocation', $allocations->get($classSubject->subject_id));
-                }
+            // Attach the allocation (with teacher) to each class subject
+            foreach ($classSubjects as $classSubject) {
+                $classSubject->setRelation('allocation', $allocations->get($classSubject->subject_id));
             }
         }
 
@@ -165,6 +151,24 @@ class ClassSubjectController extends Controller
             ->get()
             ->unique('subject_id')
             ->values();
+
+        // Attach teacher allocations for the requested session (if provided)
+        $sessionId = $request->validated('session_id');
+        $sectionId = $request->validated('section_id');
+
+        if ($sessionId !== null) {
+            $allocations = SubjectAllocation::query()
+                ->with('teacher')
+                ->where('session_id', $sessionId)
+                ->where('class_id', $academicClass->id)
+                ->when($sectionId !== null, fn ($query) => $query->where('section_id', $sectionId))
+                ->get()
+                ->keyBy('subject_id');
+
+            foreach ($classSubjects as $classSubject) {
+                $classSubject->setRelation('allocation', $allocations->get($classSubject->subject_id));
+            }
+        }
 
         return ResponseService::success(
             ClassSubjectResource::collection($classSubjects),

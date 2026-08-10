@@ -14,6 +14,7 @@ class SyncClassSubjectsRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'session_id' => ['nullable', 'integer', 'exists:academic_sessions,id'],
             'section_id' => ['nullable', 'integer', 'exists:sections,id'],
             'subject_ids' => ['present', 'array'],
             'subject_ids.*' => ['required', 'integer', 'distinct', 'exists:subjects,id'],
