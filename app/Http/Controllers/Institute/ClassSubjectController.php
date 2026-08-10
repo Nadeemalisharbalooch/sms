@@ -24,47 +24,15 @@ class ClassSubjectController extends Controller
             return ResponseService::notFound('Class not found');
         }
 
-        $classSubjects = ClassSubject::query()
-            ->with('subject')
-            ->where('class_id', $academicClass->id)
-            ->orderBy('id')
-            ->get()
-            ->unique('subject_id')
-            ->values();
-
-        return ResponseService::success(
-            ClassSubjectResource::collection($classSubjects),
-            'Class subjects retrieved successfully'
-        );
-    }
-
-    public function unassigned(Request $request, string $academicClass)
-    {
-        $academicClass = $this->activeClass($request, $academicClass);
-
-        if ($academicClass === null) {
-            return ResponseService::notFound('Class not found');
-        }
-
         $sectionId = $request->input('section_id');
-
-        if ($sectionId === null) {
-            return ResponseService::error('Validation failed', 422, [
-                'section_id' => ['The section_id field is required.'],
-            ]);
-        }
-
-        // Get the active session for this institute
-        $instituteId = $this->activeInstituteId($request);
-        $activeSessionId = AcademicSession::query()
-            ->where('institute_id', $instituteId)
-            ->where('is_active', true)
-            ->value('id');
 
         $classSubjectsQuery = ClassSubject::query()
             ->with('subject')
-            ->where('class_id', $academicClass->id)
-            ->where('section_id', $sectionId);
+            ->where('class_id', $academicClass->id);
+
+        if ($sectionId !== null) {
+            $classSubjectsQuery->where('section_id', $sectionId);
+        }
 
         $classSubjects = $classSubjectsQuery
             ->orderBy('id')
@@ -72,25 +40,39 @@ class ClassSubjectController extends Controller
             ->unique('subject_id')
             ->values();
 
-        if ($activeSessionId !== null) {
-            // Load teacher allocations for this class/section in the active session
-            $allocations = SubjectAllocation::query()
-                ->with('teacher')
-                ->where('session_id', $activeSessionId)
-                ->where('class_id', $academicClass->id)
-                ->where('section_id', $sectionId)
-                ->get()
-                ->keyBy('subject_id');
+        if ($sectionId !== null) {
+            // Get the session for this institute (either provided session_id or active session)
+            $instituteId = $this->activeInstituteId($request);
+            $sessionId = $request->input('session_id');
 
-            // Attach the allocation (with teacher) to each class subject
-            foreach ($classSubjects as $classSubject) {
-                $classSubject->setRelation('allocation', $allocations->get($classSubject->subject_id));
+            if ($sessionId === null) {
+                // Fall back to the active session
+                $sessionId = AcademicSession::query()
+                    ->where('institute_id', $instituteId)
+                    ->where('is_active', true)
+                    ->value('id');
+            }
+
+            if ($sessionId !== null) {
+                // Load teacher allocations for this class/section in the specified session
+                $allocations = SubjectAllocation::query()
+                    ->with('teacher')
+                    ->where('session_id', $sessionId)
+                    ->where('class_id', $academicClass->id)
+                    ->where('section_id', $sectionId)
+                    ->get()
+                    ->keyBy('subject_id');
+
+                // Attach the allocation (with teacher) to each class subject
+                foreach ($classSubjects as $classSubject) {
+                    $classSubject->setRelation('allocation', $allocations->get($classSubject->subject_id));
+                }
             }
         }
 
         return ResponseService::success(
             ClassSubjectResource::collection($classSubjects),
-            'Section subjects retrieved successfully'
+            'Class subjects retrieved successfully'
         );
     }
 
