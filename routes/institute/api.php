@@ -26,6 +26,9 @@ $instituteResources = function () {
         Route::get('users/current/permissions', [UserController::class, 'currentPermissions'])
             ->name('users.current.permissions');
 
+        Route::get('users/teachers', [UserController::class, 'teachers'])
+            ->name('users.teachers');
+
         Route::apiResource('roles', RoleController::class);
         Route::apiResource('users', UserController::class);
         Route::patch('/users/{id}/restore', [UserController::class, 'restore'])

@@ -90,6 +90,48 @@ class UserController extends Controller
     }
 
     /**
+     * Get all users of the active institute whose role is "teacher",
+     * including the number of assigned subjects.
+     */
+    public function teachers(Request $request)
+    {
+        $instituteId = $this->activeInstituteId($request);
+
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $teachers = User::query()
+            ->with(['roles' => fn ($query) => $query->where('roles.institute_id', $instituteId)])
+            ->withCount([
+                'subjectTeachers',
+                'subjectAllocations',
+            ])
+            ->where('is_admin', false)
+            ->whereHas('instituteUsers', fn ($query) => $query->where('institute_id', $instituteId))
+            ->whereHas('roles', function ($query) use ($instituteId) {
+                $query->where('roles.institute_id', $instituteId)
+                    ->where('roles.name', 'teacher');
+            })
+            ->latest()
+            ->get();
+
+        $data = $teachers->map(function ($teacher) {
+            return array_merge(
+                (new UserResource($teacher))->resolve(),
+                [
+                    'assigned_subjects_count' => $teacher->subject_teachers_count + $teacher->subject_allocations_count,
+                ]
+            );
+        });
+
+        return ResponseService::success(
+            $data,
+            'Teachers retrieved successfully'
+        );
+    }
+
+    /**
      * Store a newly created resource in storage.
      */
 public function store(UserStoreRequest $request)
