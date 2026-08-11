@@ -62,7 +62,7 @@ class ClassSubjectController extends Controller
         );
     }
 
-    public function destroy(Request $request, string $academicClass, string $subject)
+    public function getrecords(Request $request, string $academicClass, string $subject)
     {
         $academicClass = $this->activeClass($request, $academicClass);
 
