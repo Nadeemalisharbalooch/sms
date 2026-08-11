@@ -127,6 +127,12 @@ class RoomTeacherController extends Controller
                     'section_id' => ['The selected section must belong to the selected class.'],
                 ]);
             }
+        } elseif (AcademicSection::query()
+            ->where('class_id', $validated['class_id'])
+            ->exists()) {
+            return ResponseService::error('Validation failed', 422, [
+                'section_id' => ['A section is required because the selected class has sections.'],
+            ]);
         }
 
         // Validate teacher exists and has the correct role
