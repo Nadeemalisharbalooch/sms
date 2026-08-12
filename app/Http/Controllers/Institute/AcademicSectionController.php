@@ -9,10 +9,12 @@ use App\Http\Resources\Institute\AcademicSectionResource;
 use App\Http\Resources\Institute\SubjectResource;
 use App\Models\AcademicClass;
 use App\Models\AcademicSection;
+use App\Models\ClassSubject;
 use App\Models\InstituteUser;
 use App\Models\SubjectAllocation;
 use App\Services\ResponseService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class AcademicSectionController extends Controller
@@ -56,10 +58,16 @@ class AcademicSectionController extends Controller
             );
         }
 
-        $section = AcademicSection::create([
-            ...$validated,
-            'code' => $this->generateCode($academicClass->id, $validated['name']),
-        ]);
+        $section = DB::transaction(function () use ($academicClass, $validated) {
+            $section = AcademicSection::create([
+                ...$validated,
+                'code' => $this->generateCode($academicClass->id, $validated['name']),
+            ]);
+
+            $this->copyClassSubjectsToSection($academicClass->id, $section->id);
+
+            return $section;
+        });
 
         return ResponseService::success(
             new AcademicSectionResource($section),
@@ -172,6 +180,54 @@ class AcademicSectionController extends Controller
             ->where('class_id', $classId)
             ->where('name', $name)
             ->exists();
+    }
+
+    /**
+     * Give a new section the subjects already assigned to its class.
+     *
+     * Classes without sections keep their subjects with a null section_id.
+     * When the first section is created, those records are moved to it. For
+     * subsequent sections, the existing class subject set is copied instead.
+     */
+    private function copyClassSubjectsToSection(int $classId, int $sectionId): void
+    {
+        $classLevelSubjects = ClassSubject::query()
+            ->where('class_id', $classId)
+            ->whereNull('section_id')
+            ->lockForUpdate()
+            ->pluck('subject_id');
+
+        $subjectIds = $classLevelSubjects->isNotEmpty()
+            ? $classLevelSubjects
+            : ClassSubject::query()
+                ->where('class_id', $classId)
+                ->pluck('subject_id')
+                ->unique()
+                ->values();
+
+        if ($subjectIds->isEmpty()) {
+            return;
+        }
+
+        ClassSubject::query()->upsert(
+            $subjectIds->map(fn (int $subjectId) => [
+                'class_id' => $classId,
+                'section_id' => $sectionId,
+                'subject_id' => $subjectId,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ])->all(),
+            ['class_id', 'section_id', 'subject_id'],
+            ['updated_at']
+        );
+
+        // After the first section is created, assignments live on sections.
+        if ($classLevelSubjects->isNotEmpty()) {
+            ClassSubject::query()
+                ->where('class_id', $classId)
+                ->whereNull('section_id')
+                ->delete();
+        }
     }
 
     private function generateCode(int $classId, string $name, ?AcademicSection $except = null): string

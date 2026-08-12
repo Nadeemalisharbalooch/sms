@@ -16,7 +16,6 @@ return new class extends Migration
             $table->date('end_date');
             $table->boolean('is_active')->default(true);
             $table->timestamps();
-
             $table->unique(['institute_id', 'name']);
         });
     }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Institute;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Institute\ActivateAcademicSessionRequest;
 use App\Http\Requests\Institute\StoreAcademicSessionRequest;
 use App\Http\Requests\Institute\UpdateAcademicSessionRequest;
 use App\Http\Resources\Institute\AcademicSessionResource;
@@ -10,6 +11,7 @@ use App\Models\AcademicSession;
 use App\Models\InstituteUser;
 use App\Services\ResponseService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class AcademicSessionController extends Controller
 {
@@ -51,10 +53,20 @@ class AcademicSessionController extends Controller
             );
         }
 
-        $session = AcademicSession::create([
-            ...$request->validated(),
-            'institute_id' => $instituteId,
-        ]);
+        $validated = $request->validated();
+
+        $session = DB::transaction(function () use ($validated, $instituteId) {
+            $session = AcademicSession::create([
+                ...$validated,
+                'institute_id' => $instituteId,
+            ]);
+
+            if ($session->is_active) {
+                $this->deactivateOtherSessions($session);
+            }
+
+            return $session;
+        });
 
         return ResponseService::success(
             new AcademicSessionResource($session),
@@ -81,7 +93,15 @@ class AcademicSessionController extends Controller
             return ResponseService::notFound('Academic session not found');
         }
 
-        $academicSession->update($request->validated());
+        $validated = $request->validated();
+
+        DB::transaction(function () use ($academicSession, $validated) {
+            $academicSession->update($validated);
+
+            if ($academicSession->is_active) {
+                $this->deactivateOtherSessions($academicSession);
+            }
+        });
 
         return ResponseService::success(
             new AcademicSessionResource($academicSession->fresh()),
@@ -103,6 +123,32 @@ class AcademicSessionController extends Controller
         );
     }
 
+    /**
+     * Update only the active state of an academic session.
+     * A single institute can have only one active session at a time.
+     */
+    public function activate(ActivateAcademicSessionRequest $request, AcademicSession $academicSession)
+    {
+        if (! $this->belongsToActiveInstitute($request, $academicSession)) {
+            return ResponseService::notFound('Academic session not found');
+        }
+
+        DB::transaction(function () use ($request, $academicSession) {
+            $isActive = $request->boolean('is_active');
+
+            if ($isActive) {
+                $this->deactivateOtherSessions($academicSession);
+            }
+
+            $academicSession->update(['is_active' => $isActive]);
+        });
+
+        return ResponseService::success(
+            new AcademicSessionResource($academicSession->fresh()),
+            'Academic session active status updated successfully'
+        );
+    }
+
     private function activeInstituteId(Request $request): ?int
     {
         $instituteId = InstituteUser::query()
@@ -111,6 +157,14 @@ class AcademicSessionController extends Controller
             ->value('institute_id');
 
         return $instituteId === null ? null : (int) $instituteId;
+    }
+
+    private function deactivateOtherSessions(AcademicSession $academicSession): void
+    {
+        AcademicSession::query()
+            ->where('institute_id', $academicSession->institute_id)
+            ->whereKeyNot($academicSession->id)
+            ->update(['is_active' => false]);
     }
 
     private function belongsToActiveInstitute(Request $request, AcademicSession $academicSession): bool

@@ -1,20 +1,17 @@
 <?php
 
-use App\Http\Controllers\Auth\LoginController;
-use App\Http\Controllers\Auth\LogoutController;
-use App\Http\Controllers\Auth\RegisterController;
-use App\Http\Controllers\Institute\AcademicSessionController;
 use App\Http\Controllers\Institute\AcademicClassController;
-use App\Http\Controllers\Institute\ClassSubjectController;
 use App\Http\Controllers\Institute\AcademicSectionController;
+use App\Http\Controllers\Institute\AcademicSessionController;
+use App\Http\Controllers\Institute\ClassSubjectController;
 use App\Http\Controllers\Institute\InstituteController;
 use App\Http\Controllers\Institute\PermissionController;
 use App\Http\Controllers\Institute\RoleController;
+use App\Http\Controllers\Institute\RoomTeacherController;
+use App\Http\Controllers\Institute\SectionTeacherController;
+use App\Http\Controllers\Institute\StudentController;
 use App\Http\Controllers\Institute\SubjectController;
 use App\Http\Controllers\Institute\SubjectTeacherController;
-use App\Http\Controllers\Institute\SectionTeacherController;
-use App\Http\Controllers\Institute\SubjectAllocationController;
-use App\Http\Controllers\Institute\RoomTeacherController;
 use App\Http\Controllers\Institute\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -43,6 +40,9 @@ Route::prefix('institutes')->group($instituteResources);
 Route::prefix('institute')->group($instituteResources);
 
 Route::middleware('auth:sanctum')->group(function () {
+    Route::patch('institutes/academic-sessions/{academic_session}/activate', [AcademicSessionController::class, 'activate'])
+        ->name('institutes.academic-sessions.activate');
+
     Route::apiResource('institutes/academic-sessions', AcademicSessionController::class)
         ->parameters(['academic-sessions' => 'academic_session']);
 
@@ -58,6 +58,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::apiResource('institutes/sections', AcademicSectionController::class)
         ->parameters(['sections' => 'academic_section']);
+
+    Route::apiResource('institutes/students', StudentController::class);
 
     Route::get('institutes/sections/{academic_section}/classes', [AcademicSectionController::class, 'classes'])
         ->name('institutes.sections.classes');
