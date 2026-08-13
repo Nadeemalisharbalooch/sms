@@ -59,6 +59,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('institutes/sections', AcademicSectionController::class)
         ->parameters(['sections' => 'academic_section']);
 
+    Route::patch('institutes/students/{student}/enrollment', [StudentController::class, 'updateEnrollment'])
+        ->name('institutes.students.enrollment.update');
+    Route::post('institutes/students/{student}/promote', [StudentController::class, 'promote'])
+        ->name('institutes.students.promote');
+    Route::post('institutes/students/promote-class', [StudentController::class, 'promoteClass'])
+        ->name('institutes.students.promote-class');
     Route::apiResource('institutes/students', StudentController::class);
 
     Route::get('institutes/sections/{academic_section}/classes', [AcademicSectionController::class, 'classes'])
