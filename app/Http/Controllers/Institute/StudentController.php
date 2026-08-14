@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\Institute;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Institute\StoreStudentRequest;
 use App\Http\Requests\Institute\PromoteClassRequest;
 use App\Http\Requests\Institute\PromoteStudentRequest;
-use App\Http\Requests\Institute\UpdateStudentRequest;
+use App\Http\Requests\Institute\StoreStudentRequest;
 use App\Http\Requests\Institute\UpdateStudentEnrollmentRequest;
+use App\Http\Requests\Institute\UpdateStudentRequest;
 use App\Http\Resources\Institute\StudentResource;
 use App\Models\AcademicClass;
 use App\Models\AcademicSection;
@@ -256,58 +256,43 @@ class StudentController extends Controller
             return ResponseService::error('No active institute is associated with this user', 422);
         }
 
-        $currentSessionId = $this->activeSessionId($instituteId);
         $validated = $request->validated();
-        $error = $this->validatePromotionScope($instituteId, $currentSessionId, [
-            ...$validated,
-            'class_id' => $validated['target_class_id'],
-            'section_id' => $validated['target_section_id'] ?? null,
-        ]);
+        $errors = $this->validateBulkPromotionScope($instituteId, $validated);
 
-        if ($error !== null) {
-            return $error;
+        if ($errors !== []) {
+            return ResponseService::error('Validation failed', 422, $errors);
         }
 
-        if (! AcademicClass::query()->whereKey($validated['source_class_id'])->where('institute_id', $instituteId)->exists()) {
-            return ResponseService::error('Validation failed', 422, ['source_class_id' => ['The selected class does not belong to the active institute.']]);
-        }
+        DB::transaction(function () use ($validated) {
+            foreach ($validated['promotions'] as $promotion) {
+                Enrollment::query()
+                    ->where('student_id', $promotion['student_id'])
+                    ->where('session_id', $validated['from_session_id'])
+                    ->update(['result_status' => $promotion['promotion_status']]);
 
-        if (($validated['source_section_id'] ?? null) !== null && ! AcademicSection::query()
-            ->whereKey($validated['source_section_id'])
-            ->where('class_id', $validated['source_class_id'])
-            ->exists()) {
-            return ResponseService::error('Validation failed', 422, ['source_section_id' => ['The selected section does not belong to the selected source class.']]);
-        }
-
-        $enrollments = Enrollment::query()
-            ->where('session_id', $currentSessionId)
-            ->where('class_id', $validated['source_class_id'])
-            ->when(isset($validated['source_section_id']), fn ($query) => $query->where('section_id', $validated['source_section_id']))
-            ->get();
-
-        if ($enrollments->isEmpty()) {
-            return ResponseService::error('Validation failed', 422, ['source_class_id' => ['No students are enrolled in the selected current-session class.']]);
-        }
-
-        $studentIds = $enrollments->pluck('student_id');
-        if (Enrollment::query()->where('session_id', $validated['target_session_id'])->whereIn('student_id', $studentIds)->exists()) {
-            return $this->targetEnrollmentExistsError();
-        }
-
-        DB::transaction(function () use ($enrollments, $validated) {
-            foreach ($enrollments as $enrollment) {
-                $enrollment->update(['result_status' => $validated['status']]);
-                Enrollment::create([
-                    'student_id' => $enrollment->student_id,
-                    'session_id' => $validated['target_session_id'],
-                    'class_id' => $validated['target_class_id'],
-                    'section_id' => $validated['target_section_id'] ?? null,
-                    'roll_number' => null,
-                ]);
+                if (in_array($promotion['promotion_status'], ['promoted', 'retained'], true)) {
+                    Enrollment::query()->updateOrCreate(
+                        [
+                            'student_id' => $promotion['student_id'],
+                            'session_id' => $validated['to_session_id'],
+                        ],
+                        [
+                            'class_id' => $promotion['class_id'],
+                            'section_id' => $promotion['section_id'] ?? null,
+                            'roll_number' => $promotion['roll_number'] ?? null,
+                        ]
+                    );
+                }
             }
         });
 
-        return ResponseService::success(['promoted_count' => $enrollments->count()], 'Class promoted successfully');
+        return ResponseService::success([
+            'processed_count' => count($validated['promotions']),
+            'promoted_count' => collect($validated['promotions'])->where('promotion_status', 'promoted')->count(),
+            'retained_count' => collect($validated['promotions'])->where('promotion_status', 'retained')->count(),
+            'graduated_count' => collect($validated['promotions'])->where('promotion_status', 'graduated')->count(),
+            'left_count' => collect($validated['promotions'])->where('promotion_status', 'left')->count(),
+        ], 'Student promotions processed successfully');
     }
 
     public function destroy(Request $request, Student $student)
@@ -367,6 +352,70 @@ class StudentController extends Controller
         return ResponseService::error('Validation failed', 422, [
             'target_session_id' => ['One or more selected students are already enrolled in the target academic session.'],
         ]);
+    }
+
+    private function validateBulkPromotionScope(int $instituteId, array $validated): array
+    {
+        $errors = [];
+
+        $sessionCount = AcademicSession::query()
+            ->where('institute_id', $instituteId)
+            ->whereIn('id', [$validated['from_session_id'], $validated['to_session_id']])
+            ->count();
+
+        if ($sessionCount !== 2) {
+            $errors['session_id'] = ['Both sessions must belong to the active institute.'];
+        }
+
+        $studentIds = collect($validated['promotions'])->pluck('student_id');
+        $enrolledStudentIds = Enrollment::query()
+            ->where('session_id', $validated['from_session_id'])
+            ->whereIn('student_id', $studentIds)
+            ->pluck('student_id');
+        $instituteStudentIds = Student::query()
+            ->where('institute_id', $instituteId)
+            ->whereIn('id', $studentIds)
+            ->pluck('id');
+
+        foreach ($validated['promotions'] as $index => $promotion) {
+            if (! $instituteStudentIds->contains($promotion['student_id'])) {
+                $errors["promotions.$index.student_id"][] = 'The selected student does not belong to the active institute.';
+            }
+
+            if (! $enrolledStudentIds->contains($promotion['student_id'])) {
+                $errors["promotions.$index.student_id"][] = 'The student is not enrolled in the from session.';
+            }
+
+            $needsEnrollment = in_array($promotion['promotion_status'], ['promoted', 'retained'], true);
+
+            if ($needsEnrollment && $promotion['class_id'] === null) {
+                $errors["promotions.$index.class_id"][] = 'A class is required for promoted or retained students.';
+
+                continue;
+            }
+
+            if (! $needsEnrollment) {
+                continue;
+            }
+
+            $classBelongsToInstitute = AcademicClass::query()
+                ->whereKey($promotion['class_id'])
+                ->where('institute_id', $instituteId)
+                ->exists();
+
+            if (! $classBelongsToInstitute) {
+                $errors["promotions.$index.class_id"][] = 'The selected class does not belong to the active institute.';
+            }
+
+            if (($promotion['section_id'] ?? null) !== null && ! AcademicSection::query()
+                ->whereKey($promotion['section_id'])
+                ->where('class_id', $promotion['class_id'])
+                ->exists()) {
+                $errors["promotions.$index.section_id"][] = 'The selected section does not belong to the selected class.';
+            }
+        }
+
+        return $errors;
     }
 
     private function activeSessionId(int $instituteId): ?int

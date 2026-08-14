@@ -15,6 +15,7 @@ return new class extends Migration
             $table->foreignId('class_id')->constrained('classes')->cascadeOnDelete();
             $table->foreignId('section_id')->nullable()->constrained('sections')->nullOnDelete();
             $table->string('roll_number')->nullable();
+            $table->string('result_status', 20)->nullable();
             $table->timestamps();
 
             $table->unique(['student_id', 'session_id']);

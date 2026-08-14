@@ -15,12 +15,14 @@ class PromoteClassRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'source_class_id' => ['required', 'integer', 'exists:classes,id'],
-            'source_section_id' => ['nullable', 'integer', 'exists:sections,id'],
-            'target_session_id' => ['required', 'integer', 'exists:academic_sessions,id'],
-            'target_class_id' => ['required', 'integer', 'exists:classes,id'],
-            'target_section_id' => ['nullable', 'integer', 'exists:sections,id'],
-            'status' => ['required', Rule::in(['passed', 'failed'])],
+            'from_session_id' => ['required', 'integer', 'exists:academic_sessions,id'],
+            'to_session_id' => ['required', 'integer', 'different:from_session_id', 'exists:academic_sessions,id'],
+            'promotions' => ['required', 'array', 'min:1'],
+            'promotions.*.student_id' => ['required', 'integer', 'distinct', 'exists:students,id'],
+            'promotions.*.promotion_status' => ['required', Rule::in(['promoted', 'retained', 'graduated', 'left'])],
+            'promotions.*.class_id' => ['nullable', 'integer', 'exists:classes,id'],
+            'promotions.*.section_id' => ['nullable', 'integer', 'exists:sections,id'],
+            'promotions.*.roll_number' => ['nullable', 'string', 'max:100'],
         ];
     }
 }

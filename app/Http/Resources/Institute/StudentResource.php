@@ -18,6 +18,7 @@ class StudentResource extends JsonResource
             'enrollment' => $enrollment ? [
                 'id' => $enrollment->id, 'session_id' => $enrollment->session_id, 'class_id' => $enrollment->class_id,
                 'section_id' => $enrollment->section_id, 'roll_number' => $enrollment->roll_number,
+                'result_status' => $enrollment->result_status,
                 'status' => $enrollment->result_status,
             ] : null,
             'created_at' => $this->created_at, 'updated_at' => $this->updated_at,
