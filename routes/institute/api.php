@@ -3,6 +3,7 @@
 use App\Http\Controllers\Institute\AcademicClassController;
 use App\Http\Controllers\Institute\AcademicSectionController;
 use App\Http\Controllers\Institute\AcademicSessionController;
+use App\Http\Controllers\Institute\AttendanceController;
 use App\Http\Controllers\Institute\ClassSubjectController;
 use App\Http\Controllers\Institute\InstituteController;
 use App\Http\Controllers\Institute\PermissionController;
@@ -58,6 +59,13 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::apiResource('institutes/sections', AcademicSectionController::class)
         ->parameters(['sections' => 'academic_section']);
+
+    Route::get('institutes/teacher/attendance-tasks', [AttendanceController::class, 'tasks'])
+        ->name('institutes.teacher.attendance-tasks');
+    Route::get('institutes/attendance/roster', [AttendanceController::class, 'roster'])
+        ->name('institutes.attendance.roster');
+    Route::post('institutes/attendance', [AttendanceController::class, 'store'])
+        ->name('institutes.attendance.store');
 
     Route::patch('institutes/students/{student}/enrollment', [StudentController::class, 'updateEnrollment'])
         ->name('institutes.students.enrollment.update');
