@@ -5,6 +5,7 @@ use App\Http\Controllers\Institute\AcademicSectionController;
 use App\Http\Controllers\Institute\AcademicSessionController;
 use App\Http\Controllers\Institute\AttendanceController;
 use App\Http\Controllers\Institute\ClassSubjectController;
+use App\Http\Controllers\Institute\FeeController;
 use App\Http\Controllers\Institute\InstituteController;
 use App\Http\Controllers\Institute\PermissionController;
 use App\Http\Controllers\Institute\RoleController;
@@ -115,4 +116,46 @@ Route::middleware('auth:sanctum')->group(function () {
         ->name('institutes.activate');
 
     Route::apiResource('institutes', InstituteController::class);
+
+    // =====================================================================
+    // Module 6: Smart Fees Management
+    // =====================================================================
+
+    // API 1: Fee Categories (master data)
+    Route::get('institutes/fee-categories', [FeeController::class, 'indexCategories'])
+        ->name('institutes.fee-categories.index');
+    Route::post('institutes/fee-categories', [FeeController::class, 'storeCategory'])
+        ->name('institutes.fee-categories.store');
+    Route::patch('institutes/fee-categories/{category}', [FeeController::class, 'updateCategory'])
+        ->name('institutes.fee-categories.update');
+    Route::delete('institutes/fee-categories/{category}', [FeeController::class, 'destroyCategory'])
+        ->name('institutes.fee-categories.destroy');
+
+    // API 2: Class Fee Structures
+    Route::get('institutes/fee-structures', [FeeController::class, 'indexFeeStructures'])
+        ->name('institutes.fee-structures.index');
+    Route::post('institutes/fee-structures', [FeeController::class, 'storeFeeStructure'])
+        ->name('institutes.fee-structures.store');
+    Route::delete('institutes/fee-structures/{structure}', [FeeController::class, 'destroyFeeStructure'])
+        ->name('institutes.fee-structures.destroy');
+
+    // API 3: Student-Specific Fee Assignments
+    Route::get('institutes/fees/student-assignments', [FeeController::class, 'indexStudentAssignments'])
+        ->name('institutes.fees.student-assignments.index');
+    Route::post('institutes/fees/student-assignments', [FeeController::class, 'storeStudentAssignment'])
+        ->name('institutes.fees.student-assignments.store');
+    Route::delete('institutes/fees/student-assignments/{assignment}', [FeeController::class, 'destroyStudentAssignment'])
+        ->name('institutes.fees.student-assignments.destroy');
+
+    // API 4: Smart Bulk Voucher Generation (The Engine)
+    Route::post('institutes/fees/generate-vouchers', [FeeController::class, 'generateVouchers'])
+        ->name('institutes.fees.generate-vouchers');
+
+    // API 5: Fetch Student Ledger (Cashier Search)
+    Route::get('institutes/fees/ledger', [FeeController::class, 'ledger'])
+        ->name('institutes.fees.ledger');
+
+    // API 6: Collect Payment
+    Route::post('institutes/fees/collect', [FeeController::class, 'collect'])
+        ->name('institutes.fees.collect');
 });
