@@ -124,9 +124,9 @@ Route::middleware('auth:sanctum')->group(function () {
         ->name('institutes.fee-categories.index');
     Route::post('institutes/fee-categories', [FeeController::class, 'storeCategory'])
         ->name('institutes.fee-categories.store');
-    Route::patch('institutes/fee-categories/{category}', [FeeController::class, 'updateCategory'])
+    Route::patch('institutes/fee-categories/{categoryId}', [FeeController::class, 'updateCategory'])
         ->name('institutes.fee-categories.update');
-    Route::delete('institutes/fee-categories/{category}', [FeeController::class, 'destroyCategory'])
+    Route::delete('institutes/fee-categories/{categoryId}', [FeeController::class, 'destroyCategory'])
         ->name('institutes.fee-categories.destroy');
 
     // API 2: Class Fee Structures
@@ -134,7 +134,7 @@ Route::middleware('auth:sanctum')->group(function () {
         ->name('institutes.fee-structures.index');
     Route::post('institutes/fee-structures', [FeeController::class, 'storeFeeStructure'])
         ->name('institutes.fee-structures.store');
-    Route::delete('institutes/fee-structures/{structure}', [FeeController::class, 'destroyFeeStructure'])
+    Route::delete('institutes/fee-structures/{structureId}', [FeeController::class, 'destroyFeeStructure'])
         ->name('institutes.fee-structures.destroy');
 
     // API 3: Student-Specific Fee Assignments
@@ -142,7 +142,7 @@ Route::middleware('auth:sanctum')->group(function () {
         ->name('institutes.fees.student-assignments.index');
     Route::post('institutes/fees/student-assignments', [FeeController::class, 'storeStudentAssignment'])
         ->name('institutes.fees.student-assignments.store');
-    Route::delete('institutes/fees/student-assignments/{assignment}', [FeeController::class, 'destroyStudentAssignment'])
+    Route::delete('institutes/fees/student-assignments/{assignmentId}', [FeeController::class, 'destroyStudentAssignment'])
         ->name('institutes.fees.student-assignments.destroy');
 
     // API 4: Smart Bulk Voucher Generation (The Engine)

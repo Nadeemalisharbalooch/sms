@@ -140,6 +140,23 @@ class FeeController extends Controller
             return ResponseService::notFound('Fee category not found');
         }
 
+        $isInUse = FeeStructure::query()
+            ->where('institute_id', $instituteId)
+            ->where('fee_category_id', $category->id)
+            ->exists()
+            || StudentFeeAssignment::query()
+                ->where('institute_id', $instituteId)
+                ->where('fee_category_id', $category->id)
+                ->exists();
+
+        if ($isInUse) {
+            return ResponseService::error(
+                'This fee category cannot be deleted while it is used by a fee structure or student assignment.',
+                422,
+                ['category' => ['Remove its fee structures and student assignments first.']]
+            );
+        }
+
         $category->delete();
 
         return ResponseService::success(null, 'Fee category deleted successfully');
@@ -379,6 +396,14 @@ class FeeController extends Controller
         }
 
         $counts = DB::transaction(function () use ($instituteId, $sessionId, $classId, $billingMonth, $dueDate) {
+            // Serialize voucher generation within a session. Without this lock,
+            // simultaneous requests can both decide that a voucher is missing
+            // and then violate the unique session/student/month constraint.
+            AcademicSession::query()
+                ->whereKey($sessionId)
+                ->lockForUpdate()
+                ->firstOrFail();
+
             $students = Student::query()
                 ->where('institute_id', $instituteId)
                 ->whereHas('enrollments', function ($query) use ($sessionId, $classId) {
