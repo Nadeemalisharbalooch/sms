@@ -115,8 +115,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('institutes/{institute}/activate', [InstituteController::class, 'activate'])
         ->name('institutes.activate');
 
-    Route::apiResource('institutes', InstituteController::class);
-
     // =====================================================================
     // Module 6: Smart Fees Management
     // =====================================================================
@@ -158,4 +156,6 @@ Route::middleware('auth:sanctum')->group(function () {
     // API 6: Collect Payment
     Route::post('institutes/fees/collect', [FeeController::class, 'collect'])
         ->name('institutes.fees.collect');
+
+    Route::apiResource('institutes', InstituteController::class);
 });

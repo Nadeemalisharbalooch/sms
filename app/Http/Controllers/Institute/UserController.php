@@ -245,6 +245,32 @@ private function extractRoleIds(array $validated): array
     }
 
     /**
+     * Update the currently authenticated user's information.
+     */
+    public function updateCurrent(UserUpdateRequest $request)
+    {
+        $user = $request->user();
+        $validated = $request->validated();
+
+        // Filter out fields that should not be updated by the user themselves
+        $userData = $this->userData($validated);
+
+        // Do not update password if it is empty
+        if (array_key_exists('password', $userData) && blank($userData['password'])) {
+            unset($userData['password']);
+        }
+
+        if (! empty($userData)) {
+            $user->update($userData);
+        }
+
+        return ResponseService::success(
+            new UserResource($user),
+            'Your information has been updated successfully'
+        );
+    }
+
+    /**
      * Remove the specified resource from storage.
      */
     public function destroy(Request $request, string $id)
