@@ -597,7 +597,6 @@ class FeeController extends Controller
                 'id' => $student->id,
                 'name' => trim($student->first_name.' '.$student->last_name),
                 'class' => $enrollment?->academicClass?->name ?? 'N/A',
-                'roll_number' => $enrollment?->roll_number,
             ],
             'summary' => [
                 'total_due' => round($totalDue, 2),
@@ -606,7 +605,10 @@ class FeeController extends Controller
             'vouchers' => FeeVoucherResource::collection($vouchers),
         ];
 
-        return ResponseService::success($data, 'Student ledger retrieved successfully');
+        return response()->json([
+            'status' => 'success',
+            'data' => $data,
+        ]);
     }
 
     // =====================================================================
