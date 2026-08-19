@@ -493,6 +493,17 @@ class FeeController extends Controller
                         ]);
                     });
 
+                // A student can have a class fee and an individual assignment
+                // for the same category. Store one line per fee name so a
+                // voucher never contains duplicate-looking items.
+                $lineItems = $lineItems
+                    ->groupBy('fee_name')
+                    ->map(fn ($items, $feeName) => [
+                        'fee_name' => $feeName,
+                        'amount' => round((float) $items->sum('amount'), 2),
+                    ])
+                    ->values();
+
                 // A full discount can produce a zero-value voucher, but it must
                 // still be generated so the billing run remains complete.
                 $totalAmount = max(0, (float) $lineItems->sum('amount'));
@@ -544,59 +555,107 @@ class FeeController extends Controller
             ]);
         }
 
-        $request->validate([
-            'search' => ['required', 'string', 'max:100'],
+        $validated = $request->validate([
+            'student_id' => ['nullable', 'integer'],
+            'class_id' => ['nullable', 'integer'],
+            // Kept for existing cashier clients. Numeric searches remain a
+            // student ID search; use class_id for a class ledger.
+            'search' => ['nullable', 'string', 'max:100'],
         ]);
 
-        $search = $request->string('search')->trim()->toString();
+        $selectorCount = count(array_filter([
+            $validated['student_id'] ?? null,
+            $validated['class_id'] ?? null,
+            $request->string('search')->trim()->toString() ?: null,
+        ], fn ($value) => $value !== null));
 
-        $student = Student::query()
-            ->where('institute_id', $instituteId)
-            ->where(function ($query) use ($search, $sessionId) {
-                $query
-                    ->whereKey(is_numeric($search) ? (int) $search : 0)
-                    ->orWhereHas('enrollments', function ($enrollmentQuery) use ($search, $sessionId) {
-                        $enrollmentQuery
-                            ->where('session_id', $sessionId)
-                            ->where('roll_number', $search);
-                    })
-                    ->orWhere(function ($profileQuery) use ($search) {
-                        $profileQuery
-                            ->where('first_name', 'like', "%{$search}%")
-                            ->orWhere('last_name', 'like', "%{$search}%")
-                            ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$search}%"]);
-                    });
-            })
-            ->with(['enrollments' => function ($query) use ($sessionId) {
-                $query->where('session_id', $sessionId)->with('academicClass');
-            }])
-            ->first();
-
-        if ($student === null) {
+        if ($selectorCount > 1) {
             return ResponseService::error(
-                'Student not found',
-                404,
-                ['search' => ['No student matched the provided student ID, roll number, or name.']]
+                'Validation failed', 422,
+                ['filters' => ['Provide only one of student_id, class_id, or search.']]
             );
         }
 
-        $enrollment = $student->enrollments->first();
+        $student = null;
+        $class = null;
+        $studentId = $validated['student_id'] ?? null;
+        $classId = $validated['class_id'] ?? null;
+        $search = $request->string('search')->trim()->toString();
+
+        if ($studentId !== null || $search !== '') {
+            $student = Student::query()
+                ->where('institute_id', $instituteId)
+                ->when($studentId !== null,
+                    fn ($query) => $query->whereKey($studentId),
+                    function ($query) use ($search, $sessionId) {
+                        $query->where(function ($studentQuery) use ($search, $sessionId) {
+                            $studentQuery
+                                ->whereKey(is_numeric($search) ? (int) $search : 0)
+                                ->orWhereHas('enrollments', function ($enrollmentQuery) use ($search, $sessionId) {
+                                    $enrollmentQuery->where('session_id', $sessionId)->where('roll_number', $search);
+                                })
+                                ->orWhere(function ($profileQuery) use ($search) {
+                                    $profileQuery
+                                        ->where('first_name', 'like', "%{$search}%")
+                                        ->orWhere('last_name', 'like', "%{$search}%")
+                                        ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$search}%"]);
+                                });
+                        });
+                    }
+                )
+                ->with(['enrollments' => function ($query) use ($sessionId) {
+                    $query->where('session_id', $sessionId)->with('academicClass');
+                }])
+                ->first();
+
+            if ($student === null) {
+                return ResponseService::error(
+                    'Student not found', 404,
+                    ['student_id' => ['No student matched the provided student ID, roll number, or name.']]
+                );
+            }
+        }
+
+        if ($classId !== null) {
+            $class = AcademicClass::query()
+                ->whereKey($classId)
+                ->where('institute_id', $instituteId)
+                ->first();
+
+            if ($class === null) {
+                return ResponseService::error('Class not found', 404, ['class_id' => ['The selected class does not belong to the active institute.']]);
+            }
+        }
 
         $vouchers = FeeVoucher::query()
-            ->where('student_id', $student->id)
+            ->where('institute_id', $instituteId)
             ->where('session_id', $sessionId)
+            ->when($student !== null, fn ($query) => $query->where('student_id', $student->id))
+            ->when($class !== null, function ($query) use ($class, $sessionId) {
+                $query->whereHas('student.enrollments', fn ($enrollmentQuery) => $enrollmentQuery
+                    ->where('session_id', $sessionId)
+                    ->where('class_id', $class->id));
+            })
             ->with('items')
+            ->when($student === null, fn ($query) => $query->with(['student.enrollments' => function ($enrollmentQuery) use ($sessionId) {
+                $enrollmentQuery->where('session_id', $sessionId)->with('academicClass');
+            }]))
             ->orderBy('billing_month')
+            ->orderBy('student_id')
             ->get();
 
         $totalDue = (float) $vouchers->filter(fn (FeeVoucher $voucher) => $voucher->status !== 'paid')->sum('balance_due');
         $totalPaid = (float) $vouchers->sum('paid_amount');
 
         $data = [
-            'student' => [
+            'student' => $student === null ? null : [
                 'id' => $student->id,
                 'name' => trim($student->first_name.' '.$student->last_name),
-                'class' => $enrollment?->academicClass?->name ?? 'N/A',
+                'class' => $student->enrollments->first()?->academicClass?->name ?? 'N/A',
+            ],
+            'class' => $class === null ? null : [
+                'id' => $class->id,
+                'name' => $class->name,
             ],
             'summary' => [
                 'total_due' => round($totalDue, 2),

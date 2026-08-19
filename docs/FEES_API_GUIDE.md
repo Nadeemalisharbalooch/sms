@@ -202,9 +202,15 @@ POST  /api/institutes/fees/generate-vouchers
 ## API 5: Fetch Student Ledger (Cashier Search)
 
 ```
-GET  /api/institutes/fees/ledger?search=10-A-01
+GET  /api/institutes/fees/ledger
 ```
-Accepts an active-session `roll_number`, a `student_id`, or a student name (first/last/full name search).
+Returns all vouchers for the active institute and active session when no filter is sent.
+
+Optional filters (send only one):
+
+- `student_id=1` returns that student's vouchers.
+- `class_id=3` returns vouchers for every student enrolled in that class.
+- `search=10-A-01` remains supported for an active-session roll number, student ID, or student name.
 
 **Response:**
 ```json
