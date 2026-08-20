@@ -253,6 +253,36 @@ Optional filters (send only one):
 
 ---
 
+## API 5A: Student Fee Summary
+
+```
+GET /api/institutes/fees/student-ledger?student_id=1
+```
+
+`student_id` is required. The response returns only the student's combined
+due/paid summary; individual voucher data is not included.
+
+**Response:**
+```json
+{
+  "status": "success",
+  "data": {
+    "student": {
+      "id": 1,
+      "name": "ahmed Khan",
+      "class": "new"
+    },
+    "class": null,
+    "summary": {
+      "total_due": 5400,
+      "total_paid": 2100
+    }
+  }
+}
+```
+
+---
+
 ## API 6: Collect Payment
 
 ```
@@ -330,6 +360,7 @@ POST  /api/institutes/fees/collect
 | 10 | DELETE | `/api/institutes/fees/student-assignments/{assignment}` | Delete student assignment |
 | 11 | POST | `/api/institutes/fees/generate-vouchers` | Bulk generate monthly vouchers |
 | 12 | GET | `/api/institutes/fees/ledger?search=` | Fetch student ledger |
-| 13 | POST | `/api/institutes/fees/collect` | Collect payment |
+| 13 | GET | `/api/institutes/fees/student-ledger?student_id=1` | Fetch one student's fee summary |
+| 14 | POST | `/api/institutes/fees/collect` | Collect payment |
 
 **Note:** All requests must include `Authorization: Bearer <token>` header and are scoped to the user's active institute + active academic session automatically.

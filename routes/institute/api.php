@@ -153,6 +153,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('institutes/fees/ledger', [FeeController::class, 'ledger'])
         ->name('institutes.fees.ledger');
 
+    // API 5A: Fetch one student's voucher ledger and summary.
+    Route::get('institutes/fees/student-ledger', [FeeController::class, 'studentLedger'])
+        ->name('institutes.fees.student-ledger');
+
     // API 6: Collect Payment
     Route::post('institutes/fees/collect', [FeeController::class, 'collect'])
         ->name('institutes.fees.collect');

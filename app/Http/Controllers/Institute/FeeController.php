@@ -671,6 +671,69 @@ class FeeController extends Controller
     }
 
     // =====================================================================
+    // API 5A: Fetch One Student's Fee Summary
+    // =====================================================================
+
+    public function studentLedger(Request $request): JsonResponse
+    {
+        $instituteId = $this->activeInstituteId($request);
+
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $sessionId = $this->activeSessionId($instituteId);
+
+        if ($sessionId === null) {
+            return ResponseService::error('Validation failed', 422, [
+                'session_id' => ['No active academic session exists for the active institute.'],
+            ]);
+        }
+
+        $validated = $request->validate([
+            'student_id' => ['required', 'integer'],
+        ]);
+
+        $student = Student::query()
+            ->where('institute_id', $instituteId)
+            ->whereKey($validated['student_id'])
+            ->with(['enrollments' => function ($query) use ($sessionId) {
+                $query->where('session_id', $sessionId)->with('academicClass');
+            }])
+            ->first();
+
+        if ($student === null) {
+            return ResponseService::error('Student not found', 404, [
+                'student_id' => ['The selected student does not belong to the active institute.'],
+            ]);
+        }
+
+        $summary = FeeVoucher::query()
+            ->where('institute_id', $instituteId)
+            ->where('session_id', $sessionId)
+            ->where('student_id', $student->id)
+            ->selectRaw('COALESCE(SUM(total_amount - paid_amount), 0) as total_due')
+            ->selectRaw('COALESCE(SUM(paid_amount), 0) as total_paid')
+            ->first();
+
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'student' => [
+                    'id' => $student->id,
+                    'name' => trim($student->first_name.' '.$student->last_name),
+                    'class' => $student->enrollments->first()?->academicClass?->name ?? 'N/A',
+                ],
+                'class' => null,
+                'summary' => [
+                    'total_due' => round((float) $summary->total_due, 2),
+                    'total_paid' => round((float) $summary->total_paid, 2),
+                ],
+            ],
+        ]);
+    }
+
+    // =====================================================================
     // API 6: Collect Payment
     // =====================================================================
 
