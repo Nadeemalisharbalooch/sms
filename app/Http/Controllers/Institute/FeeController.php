@@ -734,6 +734,63 @@ class FeeController extends Controller
     }
 
     // =====================================================================
+    // API 5B: Fetch Student Fee Vouchers List
+    // =====================================================================
+
+    public function studentVouchers(Request $request): JsonResponse
+    {
+        $instituteId = $this->activeInstituteId($request);
+
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $sessionId = $request->filled('session_id')
+            ? (int) $request->input('session_id')
+            : $this->activeSessionId($instituteId);
+
+        if ($sessionId === null && ! $request->boolean('all_sessions')) {
+            return ResponseService::error('Validation failed', 422, [
+                'session_id' => ['No active academic session exists for the active institute.'],
+            ]);
+        }
+
+        $validated = $request->validate([
+            'student_id' => ['required', 'integer'],
+            'session_id' => ['nullable', 'integer'],
+            'status' => ['nullable', 'string', 'in:unpaid,paid,partially_paid,overdue,cancelled'],
+            'billing_month' => ['nullable', 'string', 'regex:/^\d{4}-\d{2}$/'],
+        ]);
+
+        $student = Student::query()
+            ->where('institute_id', $instituteId)
+            ->whereKey($validated['student_id'])
+            ->first();
+
+        if ($student === null) {
+            return ResponseService::error('Student not found', 404, [
+                'student_id' => ['The selected student does not belong to the active institute.'],
+            ]);
+        }
+
+        $vouchers = FeeVoucher::query()
+            ->where('institute_id', $instituteId)
+            ->where('student_id', $student->id)
+            ->when(! $request->boolean('all_sessions') && $sessionId !== null, fn ($query) => $query->where('session_id', $sessionId))
+            ->when($request->filled('status'), fn ($query) => $query->where('status', $validated['status']))
+            ->when($request->filled('billing_month'), fn ($query) => $query->where('billing_month', $validated['billing_month']))
+            ->with('items')
+            ->orderByDesc('billing_month')
+            ->orderByDesc('id')
+            ->get();
+
+        return ResponseService::success(
+            FeeVoucherResource::collection($vouchers),
+            'Student fee vouchers retrieved successfully'
+        );
+    }
+
+    // =====================================================================
     // API 6: Collect Payment
     // =====================================================================
 

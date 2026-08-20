@@ -283,6 +283,55 @@ due/paid summary; individual voucher data is not included.
 
 ---
 
+## API 5B: Student Fee Vouchers List
+
+```
+GET /api/institutes/fees/student-vouchers?student_id=1
+```
+or
+```
+GET /api/institutes/fees/vouchers?student_id=1
+```
+
+`student_id` is required. The response returns only the list of fee vouchers for the student.
+
+**Optional Query Filters:**
+- `status`: Filter by voucher status (`paid`, `unpaid`, `partially_paid`, `overdue`, `cancelled`).
+- `billing_month`: Filter by billing month (`YYYY-MM`).
+- `session_id`: Specific academic session ID (defaults to active session).
+- `all_sessions`: Boolean (`1` or `true`) to retrieve vouchers across all sessions.
+
+**Response:**
+```json
+{
+  "status": "success",
+  "message": "Student fee vouchers retrieved successfully",
+  "data": [
+    {
+      "voucher_id": 1045,
+      "billing_month": "2026-09",
+      "total_amount": 7500.0,
+      "paid_amount": 0.0,
+      "balance_due": 7500.0,
+      "status": "unpaid",
+      "due_date": "2026-09-10",
+      "items": [
+        {
+          "fee_name": "Tuition Fee",
+          "amount": 5000.0
+        },
+        {
+          "fee_name": "Transport Fee",
+          "amount": 2500.0
+        }
+      ]
+    }
+  ]
+}
+```
+
+---
+
 ## API 6: Collect Payment
 
 ```
@@ -361,6 +410,7 @@ POST  /api/institutes/fees/collect
 | 11 | POST | `/api/institutes/fees/generate-vouchers` | Bulk generate monthly vouchers |
 | 12 | GET | `/api/institutes/fees/ledger?search=` | Fetch student ledger |
 | 13 | GET | `/api/institutes/fees/student-ledger?student_id=1` | Fetch one student's fee summary |
-| 14 | POST | `/api/institutes/fees/collect` | Collect payment |
+| 14 | GET | `/api/institutes/fees/student-vouchers?student_id=1` | Fetch one student's fee vouchers list |
+| 15 | POST | `/api/institutes/fees/collect` | Collect payment |
 
 **Note:** All requests must include `Authorization: Bearer <token>` header and are scoped to the user's active institute + active academic session automatically.

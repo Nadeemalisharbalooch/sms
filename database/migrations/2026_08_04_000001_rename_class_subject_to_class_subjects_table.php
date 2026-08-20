@@ -14,24 +14,28 @@ return new class extends Migration
         }
 
         Schema::table('class_subjects', function (Blueprint $table) {
-            // Drop foreign keys first (they use the original constraint names from the class_subject table)
-            $table->dropForeign('class_subject_class_id_foreign');
-            $table->dropForeign('class_subject_subject_id_foreign');
+            if (\Illuminate\Support\Facades\DB::getDriverName() !== 'sqlite') {
+                // Drop foreign keys first (they use the original constraint names from the class_subject table)
+                $table->dropForeign('class_subject_class_id_foreign');
+                $table->dropForeign('class_subject_subject_id_foreign');
 
-            // Now drop the unique index
-            $table->dropUnique('class_subject_class_id_subject_id_unique');
+                // Now drop the unique index
+                $table->dropUnique('class_subject_class_id_subject_id_unique');
+            }
 
             // Add section_id column if it doesn't exist
             if (! Schema::hasColumn('class_subjects', 'section_id')) {
                 $table->foreignId('section_id')->nullable()->after('class_id')->constrained('sections')->cascadeOnDelete();
             }
 
-            // Re-add foreign keys with new names
-            $table->foreign('class_id')->references('id')->on('classes')->cascadeOnDelete();
-            $table->foreign('subject_id')->references('id')->on('subjects')->cascadeOnDelete();
+            if (\Illuminate\Support\Facades\DB::getDriverName() !== 'sqlite') {
+                // Re-add foreign keys with new names
+                $table->foreign('class_id')->references('id')->on('classes')->cascadeOnDelete();
+                $table->foreign('subject_id')->references('id')->on('subjects')->cascadeOnDelete();
 
-            // Add new unique constraint
-            $table->unique(['class_id', 'section_id', 'subject_id'], 'class_subjects_class_section_subject_unique');
+                // Add new unique constraint
+                $table->unique(['class_id', 'section_id', 'subject_id'], 'class_subjects_class_section_subject_unique');
+            }
         });
     }
 
