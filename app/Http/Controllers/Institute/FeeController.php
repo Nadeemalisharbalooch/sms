@@ -388,6 +388,8 @@ class FeeController extends Controller
         $classId = $validated['class_id'] ?? null;
         $billingMonth = $validated['billing_month'];
         $dueDate = $validated['due_date'];
+        $feeCategoryIds = $validated['fee_category_ids'] ?? null;
+        $studentIds = $validated['student_ids'] ?? null;
 
         if ($classId !== null && ! AcademicClass::query()->whereKey($classId)->where('institute_id', $instituteId)->exists()) {
             return ResponseService::error(
@@ -397,7 +399,37 @@ class FeeController extends Controller
             );
         }
 
-        $counts = DB::transaction(function () use ($instituteId, $sessionId, $classId, $billingMonth, $dueDate) {
+        if (! empty($feeCategoryIds)) {
+            $validCategoryCount = FeeCategory::query()
+                ->where('institute_id', $instituteId)
+                ->whereIn('id', $feeCategoryIds)
+                ->count();
+
+            if ($validCategoryCount !== count(array_unique($feeCategoryIds))) {
+                return ResponseService::error(
+                    'Validation failed',
+                    422,
+                    ['fee_category_ids' => ['One or more selected fee categories do not belong to the active institute.']]
+                );
+            }
+        }
+
+        if (! empty($studentIds)) {
+            $validStudentCount = Student::query()
+                ->where('institute_id', $instituteId)
+                ->whereIn('id', $studentIds)
+                ->count();
+
+            if ($validStudentCount !== count(array_unique($studentIds))) {
+                return ResponseService::error(
+                    'Validation failed',
+                    422,
+                    ['student_ids' => ['One or more selected students do not belong to the active institute.']]
+                );
+            }
+        }
+
+        $counts = DB::transaction(function () use ($instituteId, $sessionId, $classId, $billingMonth, $dueDate, $feeCategoryIds, $studentIds) {
             // Serialize voucher generation within a session. Without this lock,
             // simultaneous requests can both decide that a voucher is missing
             // and then violate the unique session/student/month constraint.
@@ -408,6 +440,7 @@ class FeeController extends Controller
 
             $students = Student::query()
                 ->where('institute_id', $instituteId)
+                ->when(! empty($studentIds), fn ($query) => $query->whereIn('id', $studentIds))
                 ->whereHas('enrollments', function ($query) use ($sessionId, $classId) {
                     $query->where('session_id', $sessionId)
                         ->when($classId !== null, fn ($classQuery) => $classQuery->where('class_id', $classId));
@@ -426,17 +459,29 @@ class FeeController extends Controller
             $classIds = $students->pluck('enrollments')->flatten()->pluck('class_id')->unique()->filter();
             $studentIds = $students->pluck('id');
 
-            $classFees = FeeStructure::query()
+            $classFeesQuery = FeeStructure::query()
                 ->where('session_id', $sessionId)
                 ->whereIn('class_id', $classIds)
-                ->with('feeCategory')
+                ->with('feeCategory');
+
+            if (! empty($feeCategoryIds)) {
+                $classFeesQuery->whereIn('fee_category_id', $feeCategoryIds);
+            }
+
+            $classFees = $classFeesQuery
                 ->get()
                 ->groupBy('class_id');
 
-            $studentFees = StudentFeeAssignment::query()
+            $studentFeesQuery = StudentFeeAssignment::query()
                 ->where('session_id', $sessionId)
                 ->whereIn('student_id', $studentIds)
-                ->with('feeCategory')
+                ->with('feeCategory');
+
+            if (! empty($feeCategoryIds)) {
+                $studentFeesQuery->whereIn('fee_category_id', $feeCategoryIds);
+            }
+
+            $studentFees = $studentFeesQuery
                 ->get()
                 ->groupBy('student_id');
 
@@ -494,6 +539,13 @@ class FeeController extends Controller
                             'amount' => (float) $assignment->amount,
                         ]);
                     });
+
+                // If specific fee categories were requested and this student has no matching fees, skip
+                if (! empty($feeCategoryIds) && $lineItems->isEmpty()) {
+                    $skippedCount++;
+
+                    continue;
+                }
 
                 // A student can have a class fee and an individual assignment
                 // for the same category. Store one line per fee name so a
@@ -1060,7 +1112,7 @@ class FeeController extends Controller
         $validated = $request->validate([
             'student_id' => ['required', 'integer'],
             'session_id' => ['nullable', 'integer'],
-            'status' => ['nullable', 'string', 'in:unpaid,paid,partially_paid,overdue,cancelled'],
+            'status' => ['nullable', 'string', 'in:unpaid,paid,partially_paid,partial,overdue,cancelled'],
             'billing_month' => ['nullable', 'string', 'regex:/^\d{4}-\d{2}$/'],
         ]);
 
@@ -1075,11 +1127,16 @@ class FeeController extends Controller
             ]);
         }
 
+        $statusFilter = $validated['status'] ?? null;
+        if ($statusFilter === 'partially_paid') {
+            $statusFilter = 'partial';
+        }
+
         $vouchers = FeeVoucher::query()
             ->where('institute_id', $instituteId)
             ->where('student_id', $student->id)
             ->when(! $request->boolean('all_sessions') && $sessionId !== null, fn ($query) => $query->where('session_id', $sessionId))
-            ->when($request->filled('status'), fn ($query) => $query->where('status', $validated['status']))
+            ->when($statusFilter !== null, fn ($query) => $query->where('status', $statusFilter))
             ->when($request->filled('billing_month'), fn ($query) => $query->where('billing_month', $validated['billing_month']))
             ->with('items')
             ->orderByDesc('billing_month')
@@ -1087,11 +1144,12 @@ class FeeController extends Controller
             ->get();
 
         $studentData = $student->load([
-            'enrollments.academicClass',
-            'enrollments.section',
-            'enrollments.session',
+            'enrollments' => function ($query) use ($sessionId) {
+                $query->when($sessionId !== null, fn ($q) => $q->where('session_id', $sessionId))
+                    ->with(['academicClass', 'section', 'session']);
+            },
         ]);
-        $enrollment = $studentData->enrollments->first();
+        $enrollment = $studentData->enrollments->first() ?? $student->enrollments()->with(['academicClass', 'section', 'session'])->latest('id')->first();
 
         $feesSummary = [
             'total_vouchers' => $vouchers->count(),
@@ -1100,7 +1158,7 @@ class FeeController extends Controller
             'total_due' => round((float) $vouchers->sum('balance_due'), 2),
             'paid_vouchers_count' => $vouchers->where('status', 'paid')->count(),
             'unpaid_vouchers_count' => $vouchers->where('status', 'unpaid')->count(),
-            'partially_paid_vouchers_count' => $vouchers->where('status', 'partially_paid')->count(),
+            'partially_paid_vouchers_count' => $vouchers->whereIn('status', ['partially_paid', 'partial'])->count(),
             'overdue_vouchers_count' => $vouchers->where('status', 'overdue')->count(),
         ];
 
@@ -1114,6 +1172,8 @@ class FeeController extends Controller
                 'class' => $enrollment?->academicClass?->name ?? 'N/A',
                 'section' => $enrollment?->section?->name ?? 'N/A',
                 'session' => $enrollment?->session?->name ?? 'N/A',
+                'guardian_name' => $student->guardian_name,
+                'guardian_phone' => $student->guardian_phone,
             ],
             'fees_summary' => $feesSummary,
             'vouchers' => FeeVoucherResource::collection($vouchers),

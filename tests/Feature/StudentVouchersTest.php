@@ -81,16 +81,22 @@ class StudentVouchersTest extends TestCase
                 'status' => 'success',
                 'message' => 'Student fee vouchers retrieved successfully',
             ])
-            ->assertJsonPath('data.0.voucher_id', $voucher->id)
-            ->assertJsonPath('data.0.billing_month', '2026-09')
-            ->assertJsonPath('data.0.total_amount', 7500)
-            ->assertJsonPath('data.0.balance_due', 7500)
-            ->assertJsonPath('data.0.items.0.fee_name', 'Tuition Fee')
-            ->assertJsonPath('data.0.items.0.amount', 5000);
+            ->assertJsonPath('data.student.id', $student->id)
+            ->assertJsonPath('data.student.name', 'Ali Khan')
+            ->assertJsonPath('data.fees_summary.total_vouchers', 1)
+            ->assertJsonPath('data.fees_summary.total_amount', 7500)
+            ->assertJsonPath('data.fees_summary.total_due', 7500)
+            ->assertJsonPath('data.vouchers.0.voucher_id', $voucher->id)
+            ->assertJsonPath('data.vouchers.0.billing_month', '2026-09')
+            ->assertJsonPath('data.vouchers.0.total_amount', 7500)
+            ->assertJsonPath('data.vouchers.0.balance_due', 7500)
+            ->assertJsonPath('data.vouchers.0.items.0.fee_name', 'Tuition Fee')
+            ->assertJsonPath('data.vouchers.0.items.0.amount', 5000);
 
         // Also test the alias endpoint
         $responseAlias = $this->getJson("/api/institutes/fees/vouchers?student_id={$student->id}");
         $responseAlias->assertStatus(200)
-            ->assertJsonPath('data.0.voucher_id', $voucher->id);
+            ->assertJsonPath('data.student.id', $student->id)
+            ->assertJsonPath('data.vouchers.0.voucher_id', $voucher->id);
     }
 }

@@ -158,30 +158,67 @@ DELETE  /api/institutes/fees/student-assignments/{assignment_id}
 POST  /api/institutes/fees/generate-vouchers
 ```
 
-**Payload — Whole Institute (class_id = null):**
+**Payload — Whole Institute (all classes, specific categories):**
 ```json
 {
   "class_id": null,
+  "fee_category_ids": [1, 2],
   "billing_month": "2026-09",
   "due_date": "2026-09-10"
 }
 ```
 
-**Payload — Single Class (class_id = 5):**
+**Payload — Single Class (specific categories):**
 ```json
 {
-  "class_id": 5,
+  "class_id": 1,
+  "fee_category_ids": [1, 2],
   "billing_month": "2026-09",
   "due_date": "2026-09-10"
 }
 ```
+
+**Payload — Single Category (via fee_category_id):**
+```json
+{
+  "class_id": 1,
+  "fee_category_id": 2,
+  "billing_month": "2026-09",
+  "due_date": "2026-09-10"
+}
+```
+
+**Payload — Specific Students Only:**
+```json
+{
+  "student_ids": [2, 5, 8],
+  "fee_category_ids": [1, 2],
+  "billing_month": "2026-09",
+  "due_date": "2026-09-10"
+}
+```
+
+**Payload — Single Student (via student_id):**
+```json
+{
+  "student_id": 2,
+  "fee_category_ids": [1],
+  "billing_month": "2026-09",
+  "due_date": "2026-09-10"
+}
+```
+
+> **Note on Parameters:**
+> - `fee_category_ids` (**Required**): Accepts an array of category IDs (e.g. `[1, 2]`) or a single integer via `fee_category_id: 1` or `fee_category_ids: [1]`.
+> - `student_ids` (**Optional**): If provided (array `[2, 5]` or single integer `student_id: 2`), vouchers will be generated **only** for the specified students. If omitted / null, vouchers are generated for all students in the scope (class or whole institute).
+> - `class_id` (**Optional**): Filter by class ID, or `null` for all classes.
 
 `billing_month` must match `YYYY-MM` format.
 
 **Backend Logic (wrapped in `DB::transaction`):**
-1. Fetch all active students (filter by `class_id` if provided, otherwise all students in active session).
+1. Fetch active students (filtered by `student_ids` if provided, and `class_id` if provided).
 2. **Idempotent Check:** Skip if a voucher exists for `student_id + billing_month + session_id`.
-3. **Calculate:** Sum of Student's Class `fee_structures` + Sum of Student's `student_fee_assignments`.
+3. **Calculate:** Sum of Student's Class `fee_structures` + Sum of Student's `student_fee_assignments` (filtered strictly by `fee_category_ids`).
 4. **Create Header:** Insert into `fee_vouchers` (total_amount, unpaid status).
 5. **Create Line Items:** Insert each breakdown row into `fee_voucher_items`.
 
@@ -366,27 +403,62 @@ GET /api/institutes/fees/vouchers?student_id=1
 {
   "status": "success",
   "message": "Student fee vouchers retrieved successfully",
-  "data": [
-    {
-      "voucher_id": 1045,
-      "billing_month": "2026-09",
-      "total_amount": 7500.0,
-      "paid_amount": 0.0,
-      "balance_due": 7500.0,
-      "status": "unpaid",
-      "due_date": "2026-09-10",
-      "items": [
-        {
-          "fee_name": "Tuition Fee",
-          "amount": 5000.0
-        },
-        {
-          "fee_name": "Transport Fee",
-          "amount": 2500.0
-        }
-      ]
-    }
-  ]
+  "data": {
+    "student": {
+      "id": 2,
+      "name": "Ali Khan",
+      "first_name": "Ali",
+      "last_name": "Khan",
+      "roll_number": "101",
+      "class": "Class 10",
+      "section": "Section A",
+      "session": "2026-2027",
+      "guardian_name": "Tariq Khan",
+      "guardian_phone": "03001234567"
+    },
+    "fees_summary": {
+      "total_vouchers": 2,
+      "total_amount": 7000,
+      "total_paid": 3500,
+      "total_due": 3500,
+      "paid_vouchers_count": 1,
+      "unpaid_vouchers_count": 1,
+      "partially_paid_vouchers_count": 0,
+      "overdue_vouchers_count": 0
+    },
+    "vouchers": [
+      {
+        "voucher_id": 6,
+        "billing_month": "2026-10",
+        "total_amount": 3500,
+        "paid_amount": 0,
+        "balance_due": 3500,
+        "status": "unpaid",
+        "due_date": "2026-09-30",
+        "items": [
+          {
+            "fee_name": "Tution Fees",
+            "amount": 3500
+          }
+        ]
+      },
+      {
+        "voucher_id": 1,
+        "billing_month": "2026-09",
+        "total_amount": 3500,
+        "paid_amount": 3500,
+        "balance_due": 0,
+        "status": "paid",
+        "due_date": "2026-09-10",
+        "items": [
+          {
+            "fee_name": "Tution Fees",
+            "amount": 3500
+          }
+        ]
+      }
+    ]
+  }
 }
 ```
 
