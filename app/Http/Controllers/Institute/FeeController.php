@@ -14,11 +14,13 @@ use App\Http\Resources\Institute\FeeStructureResource;
 use App\Http\Resources\Institute\FeeVoucherResource;
 use App\Http\Resources\Institute\StudentFeeAssignmentResource;
 use App\Models\AcademicClass;
+use App\Models\AcademicSection;
 use App\Models\AcademicSession;
 use App\Models\FeeCategory;
 use App\Models\FeePayment;
 use App\Models\FeeStructure;
 use App\Models\FeeVoucher;
+use App\Models\Institute;
 use App\Models\InstituteUser;
 use App\Models\Student;
 use App\Models\StudentFeeAssignment;
@@ -671,64 +673,297 @@ class FeeController extends Controller
     }
 
     // =====================================================================
-    // API 5A: Fetch One Student's Fee Summary
+    // API 5A: Fetch Student Ledger & Summary (Institute / Class / Section / Student)
     // =====================================================================
 
     public function studentLedger(Request $request): JsonResponse
     {
-        $instituteId = $this->activeInstituteId($request);
+        $validated = $request->validate([
+            'institute_id' => ['nullable', 'integer'],
+            'institute' => ['nullable', 'integer'],
+            'session_id' => ['nullable', 'integer'],
+            'session' => ['nullable', 'integer'],
+            'class_id' => ['nullable', 'integer'],
+            'class' => ['nullable', 'integer'],
+            'section_id' => ['nullable', 'integer'],
+            'section' => ['nullable', 'integer'],
+            'student_id' => ['nullable', 'integer'],
+            'student' => ['nullable', 'integer'],
+            'search' => ['nullable', 'string', 'max:100'],
+            'billing_month' => ['nullable', 'string', 'regex:/^\d{4}-\d{2}$/'],
+            'status' => ['nullable', 'string', 'in:unpaid,paid,partially_paid,partial,overdue,cancelled'],
+        ]);
+
+        $instituteParam = $validated['institute_id'] ?? $validated['institute'] ?? null;
+        $sessionParam = $validated['session_id'] ?? $validated['session'] ?? null;
+        $classParam = $validated['class_id'] ?? $validated['class'] ?? null;
+        $sectionParam = $validated['section_id'] ?? $validated['section'] ?? null;
+        $studentParam = $validated['student_id'] ?? $validated['student'] ?? null;
+        $billingMonth = $validated['billing_month'] ?? null;
+        $status = $validated['status'] ?? null;
+        $search = $request->string('search')->trim()->toString();
+
+        $user = $request->user();
+        if ($instituteParam !== null) {
+            $instituteId = (int) $instituteParam;
+            $hasAccess = InstituteUser::query()
+                ->where('user_id', $user->id)
+                ->where('institute_id', $instituteId)
+                ->exists();
+
+            if (! $hasAccess) {
+                return ResponseService::error('You do not have access to the selected institute.', 403);
+            }
+        } else {
+            $instituteId = $this->activeInstituteId($request);
+        }
 
         if ($instituteId === null) {
             return ResponseService::error('No active institute is associated with this user', 422);
         }
 
-        $sessionId = $this->activeSessionId($instituteId);
-
-        if ($sessionId === null) {
-            return ResponseService::error('Validation failed', 422, [
-                'session_id' => ['No active academic session exists for the active institute.'],
-            ]);
+        $institute = Institute::query()->find($instituteId);
+        if ($institute === null) {
+            return ResponseService::error('Institute not found', 404);
         }
 
-        $validated = $request->validate([
-            'student_id' => ['required', 'integer'],
-        ]);
+        if ($sessionParam !== null) {
+            $sessionId = (int) $sessionParam;
+            $session = AcademicSession::query()
+                ->where('institute_id', $instituteId)
+                ->find($sessionId);
 
-        $student = Student::query()
-            ->where('institute_id', $instituteId)
-            ->whereKey($validated['student_id'])
-            ->with(['enrollments' => function ($query) use ($sessionId) {
-                $query->where('session_id', $sessionId)->with('academicClass');
-            }])
-            ->first();
+            if ($session === null) {
+                return ResponseService::error('Validation failed', 422, [
+                    'session_id' => ['The selected academic session does not belong to the active institute.'],
+                ]);
+            }
+        } else {
+            $sessionId = $this->activeSessionId($instituteId);
 
-        if ($student === null) {
-            return ResponseService::error('Student not found', 404, [
-                'student_id' => ['The selected student does not belong to the active institute.'],
-            ]);
+            if ($sessionId === null) {
+                return ResponseService::error('Validation failed', 422, [
+                    'session_id' => ['No active academic session exists for the active institute.'],
+                ]);
+            }
+
+            $session = AcademicSession::query()->find($sessionId);
         }
 
-        $summary = FeeVoucher::query()
-            ->where('institute_id', $instituteId)
-            ->where('session_id', $sessionId)
-            ->where('student_id', $student->id)
-            ->selectRaw('COALESCE(SUM(total_amount - paid_amount), 0) as total_due')
-            ->selectRaw('COALESCE(SUM(paid_amount), 0) as total_paid')
-            ->first();
+        $classModel = null;
+        if ($classParam !== null) {
+            $classModel = AcademicClass::query()
+                ->where('institute_id', $instituteId)
+                ->find((int) $classParam);
+
+            if ($classModel === null) {
+                return ResponseService::error('Class not found', 404, [
+                    'class_id' => ['The selected class does not belong to the active institute.'],
+                ]);
+            }
+        }
+
+        $sectionModel = null;
+        if ($sectionParam !== null) {
+            $sectionQuery = AcademicSection::query()
+                ->whereHas('academicClass', fn ($q) => $q->where('institute_id', $instituteId))
+                ->whereKey((int) $sectionParam);
+
+            if ($classModel !== null) {
+                $sectionQuery->where('class_id', $classModel->id);
+            }
+
+            $sectionModel = $sectionQuery->first();
+
+            if ($sectionModel === null) {
+                return ResponseService::error('Section not found', 404, [
+                    'section_id' => ['The selected section does not belong to the active institute or class.'],
+                ]);
+            }
+        }
+
+        $studentModel = null;
+        if ($studentParam !== null) {
+            $studentModel = Student::query()
+                ->where('institute_id', $instituteId)
+                ->find((int) $studentParam);
+
+            if ($studentModel === null) {
+                return ResponseService::error('Student not found', 404, [
+                    'student_id' => ['The selected student does not belong to the active institute.'],
+                ]);
+            }
+        }
+
+        $studentsQuery = Student::query()
+            ->where('students.institute_id', $instituteId);
+
+        if ($studentModel !== null) {
+            $studentsQuery->whereKey($studentModel->id);
+        }
+
+        $studentsQuery->whereHas('enrollments', function ($enrollmentQuery) use ($sessionId, $classModel, $sectionModel) {
+            $enrollmentQuery->where('session_id', $sessionId);
+
+            if ($classModel !== null) {
+                $enrollmentQuery->where('class_id', $classModel->id);
+            }
+
+            if ($sectionModel !== null) {
+                $enrollmentQuery->where('section_id', $sectionModel->id);
+            }
+        });
+
+        if ($search !== '') {
+            $studentsQuery->where(function ($query) use ($search, $sessionId) {
+                $query->where('first_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$search}%"])
+                    ->orWhereHas('enrollments', function ($enrollmentQuery) use ($search, $sessionId) {
+                        $enrollmentQuery->where('session_id', $sessionId)->where('roll_number', 'like', "%{$search}%");
+                    });
+
+                if (is_numeric($search)) {
+                    $query->orWhere('id', (int) $search);
+                }
+            });
+        }
+
+        $students = $studentsQuery
+            ->with([
+                'enrollments' => function ($enrollmentQuery) use ($sessionId) {
+                    $enrollmentQuery->where('session_id', $sessionId)->with(['academicClass', 'section']);
+                },
+            ])
+            ->orderBy('first_name')
+            ->orderBy('last_name')
+            ->get();
+
+        $studentIds = $students->pluck('id')->all();
+
+        $vouchers = collect();
+        if (! empty($studentIds)) {
+            $vouchersQuery = FeeVoucher::query()
+                ->where('institute_id', $instituteId)
+                ->where('session_id', $sessionId)
+                ->whereIn('student_id', $studentIds);
+
+            if ($billingMonth !== null) {
+                $vouchersQuery->where('billing_month', $billingMonth);
+            }
+
+            if ($status !== null) {
+                $voucherStatus = $status === 'partially_paid' ? 'partial' : $status;
+                $vouchersQuery->where('status', $voucherStatus);
+            }
+
+            $vouchers = $vouchersQuery->get();
+        }
+
+        $vouchersByStudent = $vouchers->groupBy('student_id');
+
+        $studentList = $students->map(function (Student $student) use ($vouchersByStudent) {
+            $enrollment = $student->enrollments->first();
+            $studentVouchers = $vouchersByStudent->get($student->id, collect());
+
+            $totalAmount = (float) $studentVouchers->sum('total_amount');
+            $totalPaid = (float) $studentVouchers->sum('paid_amount');
+            $totalDue = round(max(0, $totalAmount - $totalPaid), 2);
+            $vouchersCount = $studentVouchers->count();
+
+            $studentStatus = 'no_vouchers';
+            if ($vouchersCount > 0) {
+                if ($totalDue <= 0) {
+                    $studentStatus = 'paid';
+                } elseif ($totalPaid > 0) {
+                    $studentStatus = 'partial';
+                } else {
+                    $studentStatus = 'unpaid';
+                }
+            }
+
+            return [
+                'id' => $student->id,
+                'student_id' => $student->id,
+                'first_name' => $student->first_name,
+                'last_name' => $student->last_name,
+                'name' => trim($student->first_name.' '.$student->last_name),
+                'roll_number' => $enrollment?->roll_number,
+                'class_id' => $enrollment?->class_id,
+                'class_name' => $enrollment?->academicClass?->name,
+                'class' => $enrollment?->academicClass?->name ?? 'N/A',
+                'section_id' => $enrollment?->section_id,
+                'section_name' => $enrollment?->section?->name,
+                'section' => $enrollment?->section?->name ?? 'N/A',
+                'guardian_name' => $student->guardian_name,
+                'guardian_phone' => $student->guardian_phone,
+                'summary' => [
+                    'total_vouchers' => $vouchersCount,
+                    'total_amount' => round($totalAmount, 2),
+                    'total_paid' => round($totalPaid, 2),
+                    'total_due' => round($totalDue, 2),
+                    'status' => $studentStatus,
+                ],
+            ];
+        })->values();
+
+        $overallTotalAmount = (float) $vouchers->sum('total_amount');
+        $overallTotalPaid = (float) $vouchers->sum('paid_amount');
+        $overallTotalDue = round(max(0, $overallTotalAmount - $overallTotalPaid), 2);
+        $overallVouchersCount = $vouchers->count();
+        $totalStudentsCount = $students->count();
+
+        $studentData = null;
+        if ($studentModel !== null) {
+            $firstEnrollment = $students->first()?->enrollments?->first();
+            $studentData = [
+                'id' => $studentModel->id,
+                'name' => trim($studentModel->first_name.' '.$studentModel->last_name),
+                'class' => $firstEnrollment?->academicClass?->name ?? 'N/A',
+                'section' => $firstEnrollment?->section?->name ?? 'N/A',
+                'roll_number' => $firstEnrollment?->roll_number,
+            ];
+        }
+
+        $classData = null;
+        if ($classModel !== null) {
+            $classData = [
+                'id' => $classModel->id,
+                'name' => $classModel->name,
+            ];
+        }
+
+        $sectionData = null;
+        if ($sectionModel !== null) {
+            $sectionData = [
+                'id' => $sectionModel->id,
+                'name' => $sectionModel->name,
+            ];
+        }
 
         return response()->json([
             'status' => 'success',
+            'message' => 'Student ledger retrieved successfully',
             'data' => [
-                'student' => [
-                    'id' => $student->id,
-                    'name' => trim($student->first_name.' '.$student->last_name),
-                    'class' => $student->enrollments->first()?->academicClass?->name ?? 'N/A',
+                'institute' => $institute === null ? null : [
+                    'id' => $institute->id,
+                    'name' => $institute->name,
                 ],
-                'class' => null,
+                'session' => $session === null ? null : [
+                    'id' => $session->id,
+                    'name' => $session->name,
+                ],
+                'class' => $classData,
+                'section' => $sectionData,
+                'student' => $studentData,
                 'summary' => [
-                    'total_due' => round((float) $summary->total_due, 2),
-                    'total_paid' => round((float) $summary->total_paid, 2),
+                    'total_students' => $totalStudentsCount,
+                    'total_vouchers' => $overallVouchersCount,
+                    'total_amount' => round($overallTotalAmount, 2),
+                    'total_paid' => round($overallTotalPaid, 2),
+                    'total_due' => round($overallTotalDue, 2),
                 ],
+                'students' => $studentList,
             ],
         ]);
     }
