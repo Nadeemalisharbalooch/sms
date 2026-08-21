@@ -1086,10 +1086,38 @@ class FeeController extends Controller
             ->orderByDesc('id')
             ->get();
 
-        return ResponseService::success(
-            FeeVoucherResource::collection($vouchers),
-            'Student fee vouchers retrieved successfully'
-        );
+        $studentData = $student->load([
+            'enrollments.academicClass',
+            'enrollments.section',
+            'enrollments.session',
+        ]);
+        $enrollment = $studentData->enrollments->first();
+
+        $feesSummary = [
+            'total_vouchers' => $vouchers->count(),
+            'total_amount' => round((float) $vouchers->sum('total_amount'), 2),
+            'total_paid' => round((float) $vouchers->sum('paid_amount'), 2),
+            'total_due' => round((float) $vouchers->sum('balance_due'), 2),
+            'paid_vouchers_count' => $vouchers->where('status', 'paid')->count(),
+            'unpaid_vouchers_count' => $vouchers->where('status', 'unpaid')->count(),
+            'partially_paid_vouchers_count' => $vouchers->where('status', 'partially_paid')->count(),
+            'overdue_vouchers_count' => $vouchers->where('status', 'overdue')->count(),
+        ];
+
+        return ResponseService::success([
+            'student' => [
+                'id' => $student->id,
+                'name' => trim($student->first_name.' '.$student->last_name),
+                'first_name' => $student->first_name,
+                'last_name' => $student->last_name,
+                'roll_number' => $enrollment?->roll_number,
+                'class' => $enrollment?->academicClass?->name ?? 'N/A',
+                'section' => $enrollment?->section?->name ?? 'N/A',
+                'session' => $enrollment?->session?->name ?? 'N/A',
+            ],
+            'fees_summary' => $feesSummary,
+            'vouchers' => FeeVoucherResource::collection($vouchers),
+        ], 'Student fee vouchers retrieved successfully');
     }
 
     // =====================================================================
