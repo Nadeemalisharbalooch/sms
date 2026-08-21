@@ -690,6 +690,11 @@ class FeeController extends Controller
             'student_id' => ['nullable', 'integer'],
             'student' => ['nullable', 'integer'],
             'search' => ['nullable', 'string', 'max:100'],
+            'name' => ['nullable', 'string', 'max:100'],
+            'student_name' => ['nullable', 'string', 'max:100'],
+            'q' => ['nullable', 'string', 'max:100'],
+            'query' => ['nullable', 'string', 'max:100'],
+            'roll_number' => ['nullable', 'string', 'max:100'],
             'billing_month' => ['nullable', 'string', 'regex:/^\d{4}-\d{2}$/'],
             'status' => ['nullable', 'string', 'in:unpaid,paid,partially_paid,partial,overdue,cancelled'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:500'],
@@ -703,7 +708,15 @@ class FeeController extends Controller
         $studentParam = $validated['student_id'] ?? $validated['student'] ?? null;
         $billingMonth = $validated['billing_month'] ?? null;
         $status = $validated['status'] ?? null;
-        $search = $request->string('search')->trim()->toString();
+        $search = trim((string) (
+            $validated['search']
+            ?? $validated['name']
+            ?? $validated['student_name']
+            ?? $validated['q']
+            ?? $validated['query']
+            ?? ''
+        ));
+        $rollNumberParam = trim((string) ($validated['roll_number'] ?? ''));
 
         $user = $request->user();
         if ($instituteParam !== null) {
@@ -828,6 +841,12 @@ class FeeController extends Controller
                 if (is_numeric($search)) {
                     $query->orWhere('id', (int) $search);
                 }
+            });
+        }
+
+        if ($rollNumberParam !== '') {
+            $studentsQuery->whereHas('enrollments', function ($enrollmentQuery) use ($rollNumberParam, $sessionId) {
+                $enrollmentQuery->where('session_id', $sessionId)->where('roll_number', 'like', "%{$rollNumberParam}%");
             });
         }
 

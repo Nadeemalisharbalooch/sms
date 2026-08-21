@@ -269,8 +269,8 @@ When no filter ID is provided, it automatically returns the complete data for th
 - `section_id` or `section`: Filter by section ID.
 - `student_id` or `student`: Filter by student ID.
 - `billing_month`: Filter vouchers by month (`YYYY-MM`).
-- `status`: Filter vouchers by status (`paid`, `unpaid`, `partial`, `partially_paid`, `overdue`, `cancelled`).
-- `search`: Search students by name, roll number, or student ID.
+- `search` / `name` / `student_name` / `query` / `q`: Search students by first name, last name, full name, roll number, or ID.
+- `roll_number`: Filter specifically by student roll number.
 - `per_page`: Number of student records per page (default `15`, max `500`).
 - `page`: Current page number (default `1`).
 

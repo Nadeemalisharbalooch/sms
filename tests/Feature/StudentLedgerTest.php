@@ -385,6 +385,55 @@ class StudentLedgerTest extends TestCase
         $this->assertCount(1, $responsePage2->json('data.students'));
     }
 
+    public function test_can_search_student_by_name(): void
+    {
+        // Search using 'search' parameter
+        $response = $this->getJson('/api/institutes/fees/student-ledger?search=Ali');
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'status' => 'success',
+                'data' => [
+                    'summary' => [
+                        'total_students' => 1,
+                        'total_amount' => 8000,
+                        'total_paid' => 6000,
+                        'total_due' => 2000,
+                    ],
+                ],
+            ]);
+
+        $this->assertCount(1, $response->json('data.students'));
+        $this->assertEquals('Ali Khan', $response->json('data.students.0.name'));
+
+        // Search using 'name' parameter
+        $responseName = $this->getJson('/api/institutes/fees/student-ledger?name=Sara');
+        $responseName->assertStatus(200)
+            ->assertJson([
+                'status' => 'success',
+                'data' => [
+                    'summary' => [
+                        'total_students' => 1,
+                        'total_amount' => 0,
+                    ],
+                ],
+            ]);
+        $this->assertCount(1, $responseName->json('data.students'));
+        $this->assertEquals('Sara Noor', $responseName->json('data.students.0.name'));
+
+        // Search using 'student_name' parameter
+        $responseStudentName = $this->getJson('/api/institutes/fees/student-ledger?student_name=Bilal');
+        $responseStudentName->assertStatus(200);
+        $this->assertCount(1, $responseStudentName->json('data.students'));
+        $this->assertEquals('Bilal Ahmed', $responseStudentName->json('data.students.0.name'));
+
+        // Search using 'roll_number' parameter
+        $responseRoll = $this->getJson('/api/institutes/fees/student-ledger?roll_number=9A-01');
+        $responseRoll->assertStatus(200);
+        $this->assertCount(1, $responseRoll->json('data.students'));
+        $this->assertEquals('Ali Khan', $responseRoll->json('data.students.0.name'));
+    }
+
     public function test_returns_403_when_accessing_unauthorized_institute(): void
     {
         $otherInstitute = Institute::create(['name' => 'Other School']);
