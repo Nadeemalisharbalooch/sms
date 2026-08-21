@@ -692,6 +692,8 @@ class FeeController extends Controller
             'search' => ['nullable', 'string', 'max:100'],
             'billing_month' => ['nullable', 'string', 'regex:/^\d{4}-\d{2}$/'],
             'status' => ['nullable', 'string', 'in:unpaid,paid,partially_paid,partial,overdue,cancelled'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:500'],
+            'page' => ['nullable', 'integer', 'min:1'],
         ]);
 
         $instituteParam = $validated['institute_id'] ?? $validated['institute'] ?? null;
@@ -829,7 +831,46 @@ class FeeController extends Controller
             });
         }
 
-        $students = $studentsQuery
+        // Calculate overall scope financial summary across all matching students
+        $allScopeStudentIds = (clone $studentsQuery)->pluck('students.id');
+        $totalStudentsCount = $allScopeStudentIds->count();
+
+        $overallTotalVouchers = 0;
+        $overallTotalAmount = 0.0;
+        $overallTotalPaid = 0.0;
+        $overallTotalDue = 0.0;
+
+        if ($totalStudentsCount > 0) {
+            $overallVouchersQuery = FeeVoucher::query()
+                ->where('institute_id', $instituteId)
+                ->where('session_id', $sessionId)
+                ->whereIn('student_id', $allScopeStudentIds);
+
+            if ($billingMonth !== null) {
+                $overallVouchersQuery->where('billing_month', $billingMonth);
+            }
+
+            if ($status !== null) {
+                $voucherStatus = $status === 'partially_paid' ? 'partial' : $status;
+                $overallVouchersQuery->where('status', $voucherStatus);
+            }
+
+            $overallSummary = $overallVouchersQuery->selectRaw('
+                COUNT(id) as total_vouchers,
+                COALESCE(SUM(total_amount), 0) as total_amount,
+                COALESCE(SUM(paid_amount), 0) as total_paid,
+                COALESCE(SUM(total_amount - paid_amount), 0) as total_due
+            ')->first();
+
+            $overallTotalVouchers = (int) ($overallSummary->total_vouchers ?? 0);
+            $overallTotalAmount = (float) ($overallSummary->total_amount ?? 0);
+            $overallTotalPaid = (float) ($overallSummary->total_paid ?? 0);
+            $overallTotalDue = round(max(0, (float) ($overallSummary->total_due ?? 0)), 2);
+        }
+
+        $perPage = $request->integer('per_page') > 0 ? $request->integer('per_page') : 15;
+
+        $paginatedStudents = $studentsQuery
             ->with([
                 'enrollments' => function ($enrollmentQuery) use ($sessionId) {
                     $enrollmentQuery->where('session_id', $sessionId)->with(['academicClass', 'section']);
@@ -837,32 +878,32 @@ class FeeController extends Controller
             ])
             ->orderBy('first_name')
             ->orderBy('last_name')
-            ->get();
+            ->paginate($perPage);
 
-        $studentIds = $students->pluck('id')->all();
+        $pageStudentIds = $paginatedStudents->pluck('id')->all();
 
-        $vouchers = collect();
-        if (! empty($studentIds)) {
-            $vouchersQuery = FeeVoucher::query()
+        $pageVouchers = collect();
+        if (! empty($pageStudentIds)) {
+            $pageVouchersQuery = FeeVoucher::query()
                 ->where('institute_id', $instituteId)
                 ->where('session_id', $sessionId)
-                ->whereIn('student_id', $studentIds);
+                ->whereIn('student_id', $pageStudentIds);
 
             if ($billingMonth !== null) {
-                $vouchersQuery->where('billing_month', $billingMonth);
+                $pageVouchersQuery->where('billing_month', $billingMonth);
             }
 
             if ($status !== null) {
                 $voucherStatus = $status === 'partially_paid' ? 'partial' : $status;
-                $vouchersQuery->where('status', $voucherStatus);
+                $pageVouchersQuery->where('status', $voucherStatus);
             }
 
-            $vouchers = $vouchersQuery->get();
+            $pageVouchers = $pageVouchersQuery->get();
         }
 
-        $vouchersByStudent = $vouchers->groupBy('student_id');
+        $vouchersByStudent = $pageVouchers->groupBy('student_id');
 
-        $studentList = $students->map(function (Student $student) use ($vouchersByStudent) {
+        $studentList = $paginatedStudents->getCollection()->map(function (Student $student) use ($vouchersByStudent) {
             $enrollment = $student->enrollments->first();
             $studentVouchers = $vouchersByStudent->get($student->id, collect());
 
@@ -907,15 +948,9 @@ class FeeController extends Controller
             ];
         })->values();
 
-        $overallTotalAmount = (float) $vouchers->sum('total_amount');
-        $overallTotalPaid = (float) $vouchers->sum('paid_amount');
-        $overallTotalDue = round(max(0, $overallTotalAmount - $overallTotalPaid), 2);
-        $overallVouchersCount = $vouchers->count();
-        $totalStudentsCount = $students->count();
-
         $studentData = null;
         if ($studentModel !== null) {
-            $firstEnrollment = $students->first()?->enrollments?->first();
+            $firstEnrollment = $paginatedStudents->first()?->enrollments?->first();
             $studentData = [
                 'id' => $studentModel->id,
                 'name' => trim($studentModel->first_name.' '.$studentModel->last_name),
@@ -941,6 +976,18 @@ class FeeController extends Controller
             ];
         }
 
+        $pagination = [
+            'current_page' => $paginatedStudents->currentPage(),
+            'per_page' => $paginatedStudents->perPage(),
+            'total' => $paginatedStudents->total(),
+            'last_page' => $paginatedStudents->lastPage(),
+            'from' => $paginatedStudents->firstItem(),
+            'to' => $paginatedStudents->lastItem(),
+            'has_more' => $paginatedStudents->hasMorePages(),
+            'prev_page_url' => $paginatedStudents->previousPageUrl(),
+            'next_page_url' => $paginatedStudents->nextPageUrl(),
+        ];
+
         return response()->json([
             'status' => 'success',
             'message' => 'Student ledger retrieved successfully',
@@ -958,12 +1005,13 @@ class FeeController extends Controller
                 'student' => $studentData,
                 'summary' => [
                     'total_students' => $totalStudentsCount,
-                    'total_vouchers' => $overallVouchersCount,
+                    'total_vouchers' => $overallTotalVouchers,
                     'total_amount' => round($overallTotalAmount, 2),
                     'total_paid' => round($overallTotalPaid, 2),
                     'total_due' => round($overallTotalDue, 2),
                 ],
                 'students' => $studentList,
+                'pagination' => $pagination,
             ],
         ]);
     }

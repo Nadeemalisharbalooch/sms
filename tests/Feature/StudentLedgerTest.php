@@ -337,6 +337,54 @@ class StudentLedgerTest extends TestCase
             ]);
     }
 
+    public function test_can_paginate_student_ledger(): void
+    {
+        // Request page 1 with per_page = 2
+        $response = $this->getJson('/api/institutes/fees/student-ledger?per_page=2&page=1');
+
+        $response->assertStatus(200)
+            ->assertJson([
+                'status' => 'success',
+                'data' => [
+                    'summary' => [
+                        'total_students' => 3,
+                        'total_vouchers' => 3,
+                        'total_amount' => 12000,
+                        'total_paid' => 6000,
+                        'total_due' => 6000,
+                    ],
+                    'pagination' => [
+                        'current_page' => 1,
+                        'per_page' => 2,
+                        'total' => 3,
+                        'last_page' => 2,
+                        'has_more' => true,
+                    ],
+                ],
+            ]);
+
+        $this->assertCount(2, $response->json('data.students'));
+
+        // Request page 2
+        $responsePage2 = $this->getJson('/api/institutes/fees/student-ledger?per_page=2&page=2');
+
+        $responsePage2->assertStatus(200)
+            ->assertJson([
+                'status' => 'success',
+                'data' => [
+                    'pagination' => [
+                        'current_page' => 2,
+                        'per_page' => 2,
+                        'total' => 3,
+                        'last_page' => 2,
+                        'has_more' => false,
+                    ],
+                ],
+            ]);
+
+        $this->assertCount(1, $responsePage2->json('data.students'));
+    }
+
     public function test_returns_403_when_accessing_unauthorized_institute(): void
     {
         $otherInstitute = Institute::create(['name' => 'Other School']);

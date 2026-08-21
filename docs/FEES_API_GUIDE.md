@@ -253,29 +253,89 @@ Optional filters (send only one):
 
 ---
 
-## API 5A: Student Fee Summary
+## API 5A: Student Fee Ledger & Summary (Multi-Level Scope)
 
 ```
-GET /api/institutes/fees/student-ledger?student_id=1
+GET /api/institutes/fees/student-ledger
 ```
 
-`student_id` is required. The response returns only the student's combined
-due/paid summary; individual voucher data is not included.
+Fetches the fee ledger summary and list of students with their individual fee summaries.
+When no filter ID is provided, it automatically returns the complete data for the active institute in the active academic session.
+
+### Optional Query Filters:
+- `institute_id` or `institute`: Filter by specific institute (user must have access). Defaults to active institute.
+- `session_id` or `session`: Filter by specific academic session. Defaults to active session.
+- `class_id` or `class`: Filter by class ID.
+- `section_id` or `section`: Filter by section ID.
+- `student_id` or `student`: Filter by student ID.
+- `billing_month`: Filter vouchers by month (`YYYY-MM`).
+- `status`: Filter vouchers by status (`paid`, `unpaid`, `partial`, `partially_paid`, `overdue`, `cancelled`).
+- `search`: Search students by name, roll number, or student ID.
+- `per_page`: Number of student records per page (default `15`, max `500`).
+- `page`: Current page number (default `1`).
 
 **Response:**
 ```json
 {
   "status": "success",
+  "message": "Student ledger retrieved successfully",
   "data": {
-    "student": {
+    "institute": {
       "id": 1,
-      "name": "ahmed Khan",
-      "class": "new"
+      "name": "Apex Grammar School"
     },
-    "class": null,
+    "session": {
+      "id": 2,
+      "name": "2026-2027"
+    },
+    "class": {
+      "id": 5,
+      "name": "Class 9"
+    },
+    "section": null,
+    "student": null,
     "summary": {
-      "total_due": 5400,
-      "total_paid": 2100
+      "total_students": 25,
+      "total_vouchers": 50,
+      "total_amount": 250000.0,
+      "total_paid": 180000.0,
+      "total_due": 70000.0
+    },
+    "students": [
+      {
+        "id": 1,
+        "student_id": 1,
+        "first_name": "Ali",
+        "last_name": "Khan",
+        "name": "Ali Khan",
+        "roll_number": "9A-01",
+        "class_id": 5,
+        "class_name": "Class 9",
+        "class": "Class 9",
+        "section_id": 2,
+        "section_name": "Section A",
+        "section": "Section A",
+        "guardian_name": "Tariq Khan",
+        "guardian_phone": "03001111111",
+        "summary": {
+          "total_vouchers": 2,
+          "total_amount": 10000.0,
+          "total_paid": 8000.0,
+          "total_due": 2000.0,
+          "status": "partial"
+        }
+      }
+    ],
+    "pagination": {
+      "current_page": 1,
+      "per_page": 15,
+      "total": 25,
+      "last_page": 2,
+      "from": 1,
+      "to": 15,
+      "has_more": true,
+      "prev_page_url": null,
+      "next_page_url": "http://localhost:8000/api/institutes/fees/student-ledger?page=2"
     }
   }
 }
@@ -409,7 +469,7 @@ POST  /api/institutes/fees/collect
 | 10 | DELETE | `/api/institutes/fees/student-assignments/{assignment}` | Delete student assignment |
 | 11 | POST | `/api/institutes/fees/generate-vouchers` | Bulk generate monthly vouchers |
 | 12 | GET | `/api/institutes/fees/ledger?search=` | Fetch student ledger |
-| 13 | GET | `/api/institutes/fees/student-ledger?student_id=1` | Fetch one student's fee summary |
+| 13 | GET | `/api/institutes/fees/student-ledger` | Fetch student fee ledger with multi-level filters & summary |
 | 14 | GET | `/api/institutes/fees/student-vouchers?student_id=1` | Fetch one student's fee vouchers list |
 | 15 | POST | `/api/institutes/fees/collect` | Collect payment |
 
