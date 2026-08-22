@@ -56,10 +56,71 @@ POST http://sms.test/api/institutes/classes/1/subjects
 | No `section_id` + class has NO sections | Subjects assigned directly to class (`section_id = null`) |
 | Subject ID removed in next request | Deleted from database for that class/section |
 
-### Get Assigned Subjects
+### Get Assigned Subjects for a Specific Class
 
 ```
 GET http://sms.test/api/institutes/classes/1/subjects
+```
+
+### Get All Assigned Subjects (with Class & Section)
+
+Retrieve all assigned subjects across classes and sections for the active institute.
+
+```
+GET http://sms.test/api/institutes/assigned-subjects
+```
+*(Also available at `GET http://sms.test/api/institutes/class-subjects`)*
+
+**Optional Query Parameters:**
+- `class_id`: Filter by specific class ID (e.g. `?class_id=1`)
+- `section_id`: Filter by specific section ID, or `null` for class-level (e.g. `?section_id=2` or `?section_id=null`)
+- `subject_id`: Filter by specific subject ID (e.g. `?subject_id=5`)
+- `session_id`: Include teacher allocation for a specific session (e.g. `?session_id=1`)
+- `teacher_id`: Filter by teacher user ID (used together with `session_id`, e.g. `?session_id=1&teacher_id=3`)
+
+**Example Request:**
+```
+GET http://sms.test/api/institutes/assigned-subjects?class_id=1&session_id=1
+```
+
+**Response (Success):**
+```json
+{
+  "status": "success",
+  "message": "Assigned subjects retrieved successfully",
+  "data": [
+    {
+      "id": 1,
+      "class_id": 1,
+      "section_id": 2,
+      "subject_id": 5,
+      "class": {
+        "id": 1,
+        "name": "Grade 1",
+        "code": "GRADE-1"
+      },
+      "section": {
+        "id": 2,
+        "name": "Section A",
+        "code": "SECTION-A"
+      },
+      "subject": {
+        "id": 5,
+        "name": "Mathematics",
+        "code": "MATH",
+        "description": "General Mathematics",
+        "is_active": true
+      },
+      "teacher": {
+        "id": 3,
+        "name": "Ali Khan",
+        "email": "ali@example.com"
+      },
+      "created_at": "2026-08-22T00:00:00.000000Z",
+      "updated_at": "2026-08-22T00:00:00.000000Z"
+    }
+  ]
+}
 ```
 
 ---

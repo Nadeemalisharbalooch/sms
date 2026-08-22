@@ -51,11 +51,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('institutes/classes', AcademicClassController::class)
         ->parameters(['classes' => 'academic_class']);
 
+    Route::get('institutes/assigned-subjects', [ClassSubjectController::class, 'assignedSubjects'])
+        ->name('institutes.assigned-subjects.index');
+    Route::get('institutes/class-subjects', [ClassSubjectController::class, 'assignedSubjects'])
+        ->name('institutes.class-subjects.index');
     Route::get('institutes/classes/{academic_class}/subjects', [ClassSubjectController::class, 'index'])
         ->name('institutes.classes.subjects.index');
     Route::post('institutes/classes/{academic_class}/subjects', [ClassSubjectController::class, 'sync'])
         ->name('institutes.classes.subjects.sync');
-    Route::delete('institutes/classes{academic_class}/subjects/{subject}', [ClassSubjectController::class, 'getrecords'])
+    Route::delete('institutes/classes/{academic_class}/subjects/{subject}', [ClassSubjectController::class, 'getrecords'])
         ->name('institutes.classes.subjects.destroy');
 
     Route::apiResource('institutes/sections', AcademicSectionController::class)

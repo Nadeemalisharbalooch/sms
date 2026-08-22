@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Institute;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Institute\SyncClassSubjectsRequest;
+use App\Http\Resources\Institute\AssignedSubjectResource;
 use App\Http\Resources\Institute\ClassSubjectResource;
 use App\Models\AcademicClass;
 use App\Models\ClassSubject;
@@ -15,6 +16,70 @@ use Illuminate\Http\Request;
 
 class ClassSubjectController extends Controller
 {
+    public function assignedSubjects(Request $request)
+    {
+        $instituteId = $this->activeInstituteId($request);
+
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $sessionId = $request->input('session_id');
+        $classId = $request->input('class_id');
+        $sectionId = $request->input('section_id');
+        $subjectId = $request->input('subject_id');
+        $teacherId = $request->input('teacher_id');
+
+        $query = ClassSubject::query()
+            ->with(['academicClass', 'section', 'subject'])
+            ->whereHas('academicClass', fn ($q) => $q->where('institute_id', $instituteId))
+            ->when($classId !== null, fn ($q) => $q->where('class_id', (int) $classId))
+            ->when($sectionId !== null, function ($q) use ($sectionId) {
+                if ($sectionId === 'null' || $sectionId === '0') {
+                    $q->whereNull('section_id');
+                } else {
+                    $q->where('section_id', (int) $sectionId);
+                }
+            })
+            ->when($subjectId !== null, fn ($q) => $q->where('subject_id', (int) $subjectId));
+
+        $classSubjects = $query->orderBy('class_id')
+            ->orderBy('section_id')
+            ->orderBy('subject_id')
+            ->get();
+
+        if ($sessionId !== null) {
+            $allocations = SubjectAllocation::query()
+                ->with('teacher')
+                ->where('session_id', $sessionId)
+                ->whereHas('academicClass', fn ($q) => $q->where('institute_id', $instituteId))
+                ->when($classId !== null, fn ($q) => $q->where('class_id', (int) $classId))
+                ->when($sectionId !== null && $sectionId !== 'null' && $sectionId !== '0', fn ($q) => $q->where('section_id', (int) $sectionId))
+                ->when($teacherId !== null, fn ($q) => $q->where('teacher_user_id', (int) $teacherId))
+                ->get();
+
+            $allocationMap = [];
+            foreach ($allocations as $alloc) {
+                $key = "{$alloc->class_id}_{$alloc->section_id}_{$alloc->subject_id}";
+                $allocationMap[$key] = $alloc;
+            }
+
+            foreach ($classSubjects as $classSubject) {
+                $key = "{$classSubject->class_id}_{$classSubject->section_id}_{$classSubject->subject_id}";
+                $classSubject->setRelation('allocation', $allocationMap[$key] ?? null);
+            }
+
+            if ($teacherId !== null) {
+                $classSubjects = $classSubjects->filter(fn ($cs) => $cs->allocation !== null)->values();
+            }
+        }
+
+        return ResponseService::success(
+            AssignedSubjectResource::collection($classSubjects),
+            'Assigned subjects retrieved successfully'
+        );
+    }
+
     public function index(Request $request, string $academicClass)
     {
         $academicClass = $this->activeClass($request, $academicClass);

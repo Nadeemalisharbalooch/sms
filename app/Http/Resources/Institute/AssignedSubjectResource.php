@@ -1,0 +1,43 @@
+<?php
+
+namespace App\Http\Resources\Institute;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+class AssignedSubjectResource extends JsonResource
+{
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'class_id' => $this->class_id,
+            'section_id' => $this->section_id,
+            'subject_id' => $this->subject_id,
+            'class' => $this->whenLoaded('academicClass', fn () => [
+                'id' => $this->academicClass->id,
+                'name' => $this->academicClass->name,
+                'code' => $this->academicClass->code,
+            ]),
+            'section' => $this->whenLoaded('section', fn () => $this->section ? [
+                'id' => $this->section->id,
+                'name' => $this->section->name,
+                'code' => $this->section->code,
+            ] : null),
+            'subject' => $this->whenLoaded('subject', fn () => [
+                'id' => $this->subject->id,
+                'name' => $this->subject->name,
+                'code' => $this->subject->code,
+                'description' => $this->subject->description,
+                'is_active' => $this->subject->is_active,
+            ]),
+            'teacher' => $this->whenLoaded('allocation', fn () => $this->allocation && $this->allocation->teacher ? [
+                'id' => $this->allocation->teacher->id,
+                'name' => $this->allocation->teacher->name,
+                'email' => $this->allocation->teacher->email,
+            ] : null),
+            'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at,
+        ];
+    }
+}
