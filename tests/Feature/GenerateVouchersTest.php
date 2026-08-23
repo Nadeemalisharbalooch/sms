@@ -322,4 +322,202 @@ class GenerateVouchersTest extends TestCase
         $this->assertTrue(FeeVoucher::where('student_id', $student1->id)->where('billing_month', '2026-11')->exists());
         $this->assertFalse(FeeVoucher::where('student_id', $student2->id)->where('billing_month', '2026-11')->exists());
     }
+
+    public function test_can_bulk_delete_unpaid_generated_vouchers(): void
+    {
+        $user = User::factory()->create();
+        $institute = Institute::create(['name' => 'City Academy']);
+
+        InstituteUser::create([
+            'user_id' => $user->id,
+            'institute_id' => $institute->id,
+            'is_active' => true,
+        ]);
+
+        $session = AcademicSession::create([
+            'institute_id' => $institute->id,
+            'name' => '2026-2027',
+            'start_date' => '2026-08-01',
+            'end_date' => '2027-06-30',
+            'is_active' => true,
+        ]);
+
+        $class = AcademicClass::create([
+            'institute_id' => $institute->id,
+            'name' => 'Class 1',
+            'code' => 'C1',
+        ]);
+
+        $student = Student::create([
+            'institute_id' => $institute->id,
+            'first_name' => 'Bilal',
+            'last_name' => 'Ahmed',
+            'dob' => '2012-05-10',
+            'gender' => 'male',
+            'guardian_name' => 'Ahmed',
+            'guardian_phone' => '03001234567',
+            'admission_date' => '2026-08-01',
+        ]);
+
+        Enrollment::create([
+            'student_id' => $student->id,
+            'session_id' => $session->id,
+            'class_id' => $class->id,
+            'roll_number' => '101',
+        ]);
+
+        $voucher = FeeVoucher::create([
+            'institute_id' => $institute->id,
+            'session_id' => $session->id,
+            'student_id' => $student->id,
+            'billing_month' => '2026-08',
+            'due_date' => '2026-08-10',
+            'total_amount' => 5000,
+            'paid_amount' => 0,
+            'status' => 'unpaid',
+        ]);
+
+        Sanctum::actingAs($user);
+
+        // Delete generated vouchers for 2026-08
+        $response = $this->deleteJson('/api/institutes/fees/generate-vouchers', [
+            'billing_month' => '2026-08',
+            'class_id' => $class->id,
+        ]);
+
+        $response->assertOk();
+        $response->assertJson([
+            'status' => 'success',
+            'data' => [
+                'deleted_count' => 1,
+                'skipped_paid_count' => 0,
+            ],
+        ]);
+
+        $this->assertDatabaseMissing('fee_vouchers', ['id' => $voucher->id]);
+    }
+
+    public function test_skips_paid_vouchers_during_bulk_delete_unless_force(): void
+    {
+        $user = User::factory()->create();
+        $institute = Institute::create(['name' => 'City Academy']);
+
+        InstituteUser::create([
+            'user_id' => $user->id,
+            'institute_id' => $institute->id,
+            'is_active' => true,
+        ]);
+
+        $session = AcademicSession::create([
+            'institute_id' => $institute->id,
+            'name' => '2026-2027',
+            'start_date' => '2026-08-01',
+            'end_date' => '2027-06-30',
+            'is_active' => true,
+        ]);
+
+        $student = Student::create([
+            'institute_id' => $institute->id,
+            'first_name' => 'Zaid',
+            'last_name' => 'Khan',
+            'dob' => '2012-05-10',
+            'gender' => 'male',
+            'guardian_name' => 'Khan',
+            'guardian_phone' => '03001234567',
+            'admission_date' => '2026-08-01',
+        ]);
+
+        $paidVoucher = FeeVoucher::create([
+            'institute_id' => $institute->id,
+            'session_id' => $session->id,
+            'student_id' => $student->id,
+            'billing_month' => '2026-09',
+            'due_date' => '2026-09-10',
+            'total_amount' => 5000,
+            'paid_amount' => 5000,
+            'status' => 'paid',
+        ]);
+
+        Sanctum::actingAs($user);
+
+        // Try deleting without force -> should skip paid voucher
+        $response = $this->deleteJson('/api/institutes/fees/generate-vouchers', [
+            'billing_month' => '2026-09',
+            'force' => false,
+        ]);
+
+        $response->assertOk();
+        $response->assertJson([
+            'status' => 'success',
+            'data' => [
+                'deleted_count' => 0,
+                'skipped_paid_count' => 1,
+            ],
+        ]);
+        $this->assertDatabaseHas('fee_vouchers', ['id' => $paidVoucher->id]);
+
+        // Delete with force=true -> deletes voucher
+        $forceResponse = $this->deleteJson('/api/institutes/fees/generate-vouchers', [
+            'billing_month' => '2026-09',
+            'force' => true,
+        ]);
+
+        $forceResponse->assertOk();
+        $forceResponse->assertJson([
+            'status' => 'success',
+            'data' => [
+                'deleted_count' => 1,
+                'skipped_paid_count' => 0,
+            ],
+        ]);
+        $this->assertDatabaseMissing('fee_vouchers', ['id' => $paidVoucher->id]);
+    }
+
+    public function test_can_delete_single_voucher_by_id(): void
+    {
+        $user = User::factory()->create();
+        $institute = Institute::create(['name' => 'City Academy']);
+
+        InstituteUser::create([
+            'user_id' => $user->id,
+            'institute_id' => $institute->id,
+            'is_active' => true,
+        ]);
+
+        $session = AcademicSession::create([
+            'institute_id' => $institute->id,
+            'name' => '2026-2027',
+            'start_date' => '2026-08-01',
+            'end_date' => '2027-06-30',
+            'is_active' => true,
+        ]);
+
+        $student = Student::create([
+            'institute_id' => $institute->id,
+            'first_name' => 'Usman',
+            'last_name' => 'Tariq',
+            'dob' => '2012-05-10',
+            'gender' => 'male',
+            'guardian_name' => 'Tariq',
+            'guardian_phone' => '03001234567',
+            'admission_date' => '2026-08-01',
+        ]);
+
+        $voucher = FeeVoucher::create([
+            'institute_id' => $institute->id,
+            'session_id' => $session->id,
+            'student_id' => $student->id,
+            'billing_month' => '2026-10',
+            'due_date' => '2026-10-10',
+            'total_amount' => 3000,
+            'paid_amount' => 0,
+            'status' => 'unpaid',
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->deleteJson("/api/institutes/fees/vouchers/{$voucher->id}");
+        $response->assertOk();
+        $this->assertDatabaseMissing('fee_vouchers', ['id' => $voucher->id]);
+    }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Institute;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Institute\CollectFeePaymentRequest;
+use App\Http\Requests\Institute\DeleteVouchersRequest;
 use App\Http\Requests\Institute\GenerateVouchersRequest;
 use App\Http\Requests\Institute\StoreFeeCategoryRequest;
 use App\Http\Requests\Institute\StoreFeeStructureRequest;
@@ -587,6 +588,122 @@ class FeeController extends Controller
             $counts,
             'Vouchers generated successfully'
         );
+    }
+
+    /**
+     * Bulk delete generated fee vouchers (with safety checks for paid vouchers).
+     */
+    public function destroyVouchers(DeleteVouchersRequest $request): JsonResponse
+    {
+        $instituteId = $this->activeInstituteId($request);
+
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $sessionId = $request->input('session_id') ?: $this->activeSessionId($instituteId);
+
+        if ($sessionId === null) {
+            return ResponseService::error('Validation failed', 422, [
+                'session_id' => ['No active academic session exists for the active institute.'],
+            ]);
+        }
+
+        $validated = $request->validated();
+        $classId = $validated['class_id'] ?? null;
+        $billingMonth = $validated['billing_month'] ?? null;
+        $studentIds = $validated['student_ids'] ?? null;
+        $voucherIds = $validated['voucher_ids'] ?? null;
+        $force = (bool) ($validated['force'] ?? false);
+
+        if ($classId !== null && ! AcademicClass::query()->whereKey($classId)->where('institute_id', $instituteId)->exists()) {
+            return ResponseService::error(
+                'Validation failed',
+                422,
+                ['class_id' => ['The selected class does not belong to the active institute.']]
+            );
+        }
+
+        $query = FeeVoucher::query()
+            ->where('institute_id', $instituteId)
+            ->where('session_id', $sessionId)
+            ->when($billingMonth !== null, fn ($q) => $q->where('billing_month', $billingMonth))
+            ->when(! empty($voucherIds), fn ($q) => $q->whereIn('id', $voucherIds))
+            ->when(! empty($studentIds), fn ($q) => $q->whereIn('student_id', $studentIds))
+            ->when($classId !== null, function ($q) use ($sessionId, $classId) {
+                $q->whereHas('student.enrollments', function ($eq) use ($sessionId, $classId) {
+                    $eq->where('session_id', $sessionId)->where('class_id', $classId);
+                });
+            });
+
+        $vouchers = $query->with('payments')->get();
+
+        if ($vouchers->isEmpty()) {
+            return ResponseService::success([
+                'deleted_count' => 0,
+                'skipped_paid_count' => 0,
+            ], 'No matching fee vouchers found to delete');
+        }
+
+        $deletedCount = 0;
+        $skippedPaidCount = 0;
+
+        DB::transaction(function () use ($vouchers, $force, &$deletedCount, &$skippedPaidCount) {
+            foreach ($vouchers as $voucher) {
+                $hasPayments = $voucher->paid_amount > 0 || $voucher->payments->isNotEmpty() || $voucher->status !== 'unpaid';
+
+                if ($hasPayments && ! $force) {
+                    $skippedPaidCount++;
+                    continue;
+                }
+
+                $voucher->delete();
+                $deletedCount++;
+            }
+        });
+
+        $message = "{$deletedCount} fee voucher(s) deleted successfully.";
+        if ($skippedPaidCount > 0) {
+            $message .= " ({$skippedPaidCount} voucher(s) were skipped because they contain recorded payments).";
+        }
+
+        return ResponseService::success([
+            'deleted_count' => $deletedCount,
+            'skipped_paid_count' => $skippedPaidCount,
+        ], $message);
+    }
+
+    /**
+     * Delete a single fee voucher by ID.
+     */
+    public function destroyVoucher(Request $request, int $voucherId): JsonResponse
+    {
+        $instituteId = $this->activeInstituteId($request);
+
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $voucher = FeeVoucher::query()
+            ->where('institute_id', $instituteId)
+            ->whereKey($voucherId)
+            ->with('payments')
+            ->first();
+
+        if ($voucher === null) {
+            return ResponseService::notFound('Fee voucher not found');
+        }
+
+        $force = $request->boolean('force');
+        $hasPayments = $voucher->paid_amount > 0 || $voucher->payments->isNotEmpty() || $voucher->status !== 'unpaid';
+
+        if ($hasPayments && ! $force) {
+            return ResponseService::error('Cannot delete a fee voucher with recorded payments. Use force=true if you really wish to delete it.', 422);
+        }
+
+        $voucher->delete();
+
+        return ResponseService::success(null, 'Fee voucher deleted successfully');
     }
 
     // =====================================================================

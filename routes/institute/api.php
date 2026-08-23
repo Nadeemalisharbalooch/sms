@@ -14,6 +14,7 @@ use App\Http\Controllers\Institute\SectionTeacherController;
 use App\Http\Controllers\Institute\StudentController;
 use App\Http\Controllers\Institute\SubjectController;
 use App\Http\Controllers\Institute\SubjectTeacherController;
+use App\Http\Controllers\Institute\TimetableController;
 use App\Http\Controllers\Institute\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -156,6 +157,12 @@ Route::middleware('auth:sanctum')->group(function () {
     // API 4: Smart Bulk Voucher Generation (The Engine)
     Route::post('institutes/fees/generate-vouchers', [FeeController::class, 'generateVouchers'])
         ->name('institutes.fees.generate-vouchers');
+    Route::delete('institutes/fees/generate-vouchers', [FeeController::class, 'destroyVouchers'])
+        ->name('institutes.fees.generate-vouchers.destroy');
+    Route::delete('institutes/fees/vouchers', [FeeController::class, 'destroyVouchers'])
+        ->name('institutes.fees.vouchers.destroyBulk');
+    Route::delete('institutes/fees/vouchers/{voucherId}', [FeeController::class, 'destroyVoucher'])
+        ->name('institutes.fees.vouchers.destroy');
 
     // API 5: Fetch Student Ledger (Cashier Search)
     Route::get('institutes/fees/ledger', [FeeController::class, 'ledger'])
@@ -174,6 +181,36 @@ Route::middleware('auth:sanctum')->group(function () {
     // API 6: Collect Payment
     Route::post('institutes/fees/collect', [FeeController::class, 'collect'])
         ->name('institutes.fees.collect');
+
+    // =====================================================================
+    // Module 7: Timetable Generator & Scheduling
+    // =====================================================================
+    Route::get('institutes/timetable/slots', [TimetableController::class, 'indexSlots'])
+        ->name('institutes.timetable.slots.index');
+    Route::post('institutes/timetable/slots', [TimetableController::class, 'storeSlot'])
+        ->name('institutes.timetable.slots.store');
+    Route::put('institutes/timetable/slots/{timeSlot}', [TimetableController::class, 'updateSlot'])
+        ->name('institutes.timetable.slots.update');
+    Route::delete('institutes/timetable/slots/{timeSlot}', [TimetableController::class, 'destroySlot'])
+        ->name('institutes.timetable.slots.destroy');
+    Route::post('institutes/timetable/slots/preset', [TimetableController::class, 'seedPresetSlots'])
+        ->name('institutes.timetable.slots.preset');
+
+    Route::post('institutes/timetable/generate', [TimetableController::class, 'generate'])
+        ->name('institutes.timetable.generate');
+
+    Route::get('institutes/timetable/class', [TimetableController::class, 'classSchedule'])
+        ->name('institutes.timetable.class');
+    Route::get('institutes/timetable/teacher', [TimetableController::class, 'teacherSchedule'])
+        ->name('institutes.timetable.teacher');
+    Route::get('institutes/timetable/master', [TimetableController::class, 'masterSchedule'])
+        ->name('institutes.timetable.master');
+
+    Route::post('institutes/timetable/swap', [TimetableController::class, 'swap'])
+        ->name('institutes.timetable.swap');
+
+    Route::get('institutes/timetable/export', [TimetableController::class, 'export'])
+        ->name('institutes.timetable.export');
 
     Route::apiResource('institutes', InstituteController::class);
 });
