@@ -69,6 +69,10 @@ Route::middleware('auth:sanctum')->group(function () {
         ->name('institutes.teacher.attendance-tasks');
     Route::get('institutes/attendance/roster', [AttendanceController::class, 'roster'])
         ->name('institutes.attendance.roster');
+    Route::get('institutes/attendance', [AttendanceController::class, 'index'])
+        ->name('institutes.attendance.index');
+    Route::get('institutes/attendance/records', [AttendanceController::class, 'index'])
+        ->name('institutes.attendance.records');
     Route::post('institutes/attendance', [AttendanceController::class, 'store'])
         ->name('institutes.attendance.store');
 

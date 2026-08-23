@@ -43,11 +43,13 @@ class GenerateVouchersTest extends TestCase
         $class1 = AcademicClass::create([
             'institute_id' => $institute->id,
             'name' => 'Class 1',
+            'code' => 'C1',
         ]);
 
         $class2 = AcademicClass::create([
             'institute_id' => $institute->id,
             'name' => 'Class 2',
+            'code' => 'C2',
         ]);
 
         $student1 = Student::create([
@@ -244,6 +246,7 @@ class GenerateVouchersTest extends TestCase
         $class = AcademicClass::create([
             'institute_id' => $institute->id,
             'name' => 'Class 1',
+            'code' => 'C1',
         ]);
 
         $student1 = Student::create([

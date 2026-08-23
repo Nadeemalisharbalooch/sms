@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Institute;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Institute\AttendanceRosterRequest;
+use App\Http\Requests\Institute\GetAttendanceRequest;
 use App\Http\Requests\Institute\StoreAttendanceRequest;
 use App\Models\AcademicClass;
 use App\Models\AcademicSection;
@@ -22,6 +23,124 @@ use Illuminate\Support\Facades\DB;
 
 class AttendanceController extends Controller
 {
+    public function index(GetAttendanceRequest $request)
+    {
+        $institute = $this->activeInstitute($request);
+
+        if ($institute === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $validated = $request->validated();
+        $sessionId = $validated['session_id'] ?? $this->activeSessionId($institute->id);
+
+        if ($sessionId === null) {
+            return ResponseService::error('Validation failed', 422, ['session_id' => ['No active academic session exists for the active institute.']]);
+        }
+
+        $error = $this->attendanceScopeError($institute, $validated);
+
+        if ($error !== null) {
+            return $error;
+        }
+
+        $date = $validated['date'];
+
+        $enrollments = Enrollment::query()
+            ->with('student')
+            ->where('session_id', $sessionId)
+            ->where('class_id', $validated['class_id'])
+            ->when(array_key_exists('section_id', $validated), fn ($query) => $this->applyNullableScope($query, 'section_id', $validated['section_id']))
+            ->whereHas('student', fn ($query) => $query->where('institute_id', $institute->id))
+            ->orderBy('roll_number')
+            ->get();
+
+        $attendances = Attendance::query()
+            ->with('markedBy:id,name')
+            ->where('session_id', $sessionId)
+            ->where('class_id', $validated['class_id'])
+            ->when(array_key_exists('section_id', $validated), fn ($query) => $this->applyNullableScope($query, 'section_id', $validated['section_id']))
+            ->when(
+                $institute->attendance_mode === 'class',
+                fn ($query) => $query->whereNull('subject_id'),
+                fn ($query) => $query->where('subject_id', $validated['subject_id'] ?? null)
+            )
+            ->whereDate('date', $date)
+            ->get()
+            ->keyBy('student_id');
+
+        $presentCount = 0;
+        $absentCount = 0;
+        $lateCount = 0;
+        $leaveCount = 0;
+        $unmarkedCount = 0;
+
+        $records = $enrollments->map(function (Enrollment $enrollment) use ($attendances, &$presentCount, &$absentCount, &$lateCount, &$leaveCount, &$unmarkedCount) {
+            /** @var Attendance|null $attendance */
+            $attendance = $attendances->get($enrollment->student_id);
+            $status = $attendance?->status;
+
+            match ($status) {
+                'present' => $presentCount++,
+                'absent' => $absentCount++,
+                'late' => $lateCount++,
+                'leave' => $leaveCount++,
+                default => $unmarkedCount++,
+            };
+
+            return [
+                'student_id' => $enrollment->student_id,
+                'roll_number' => $enrollment->roll_number,
+                'first_name' => $enrollment->student?->first_name,
+                'last_name' => $enrollment->student?->last_name,
+                'full_name' => trim(($enrollment->student?->first_name ?? '').' '.($enrollment->student?->last_name ?? '')),
+                'gender' => $enrollment->student?->gender,
+                'guardian_name' => $enrollment->student?->guardian_name,
+                'guardian_phone' => $enrollment->student?->guardian_phone,
+                'attendance_id' => $attendance?->id,
+                'status' => $status,
+                'marked_by' => $attendance?->markedBy ? [
+                    'id' => $attendance->markedBy->id,
+                    'name' => $attendance->markedBy->name,
+                ] : null,
+                'marked_at' => $attendance?->updated_at?->toISOString() ?? $attendance?->created_at?->toISOString(),
+            ];
+        });
+
+        $academicClass = AcademicClass::find($validated['class_id']);
+        $section = isset($validated['section_id']) ? AcademicSection::find($validated['section_id']) : null;
+        $subject = isset($validated['subject_id']) ? Subject::find($validated['subject_id']) : null;
+
+        $totalStudents = $enrollments->count();
+
+        return ResponseService::success([
+            'attendance_mode' => $institute->attendance_mode,
+            'session_id' => (int) $sessionId,
+            'date' => $date,
+            'class' => [
+                'id' => $academicClass->id,
+                'name' => $academicClass->name,
+            ],
+            'section' => $section ? [
+                'id' => $section->id,
+                'name' => $section->name,
+            ] : null,
+            'subject' => $subject ? [
+                'id' => $subject->id,
+                'name' => $subject->name,
+            ] : null,
+            'summary' => [
+                'total_students' => $totalStudents,
+                'present_count' => $presentCount,
+                'absent_count' => $absentCount,
+                'late_count' => $lateCount,
+                'leave_count' => $leaveCount,
+                'unmarked_count' => $unmarkedCount,
+                'is_fully_marked' => $totalStudents > 0 && $unmarkedCount === 0,
+            ],
+            'records' => $records->values(),
+        ], 'Attendance retrieved successfully');
+    }
     public function tasks(Request $request)
     {
         $institute = $this->activeInstitute($request);
