@@ -316,4 +316,168 @@ class TimetableTest extends TestCase
         ]);
         $backToBackResponse->assertCreated();
     }
+
+    public function test_step1_admin_shifts_and_timing_configuration(): void
+    {
+        [$user, $institute, $session] = $this->createInstituteContext();
+        Sanctum::actingAs($user);
+
+        // Step 1: Admin configures 40 min duration, Standard Days (08:00 - 13:30 with Break 11:00-12:00) & Friday (08:00 - 12:00 No Break)
+        $response = $this->postJson('/api/institutes/timetable/shifts', [
+            'period_duration' => 40,
+            'standard_days' => [
+                'days' => ['monday', 'tuesday', 'wednesday', 'thursday', 'saturday'],
+                'start_time' => '08:00',
+                'end_time' => '13:30',
+                'has_break' => true,
+                'break_name' => 'Recess / Break',
+                'break_start' => '11:00',
+                'break_end' => '12:00',
+            ],
+            'friday' => [
+                'days' => ['friday'],
+                'start_time' => '08:00',
+                'end_time' => '12:00',
+                'has_break' => false,
+            ],
+        ]);
+
+        $response->assertOk();
+        $response->assertJsonPath('status', 'success');
+
+        $slots = TimetableTimeSlot::where('institute_id', $institute->id)->get();
+        $this->assertNotEmpty($slots);
+
+        // Check standard day break exists
+        $breakSlot = $slots->firstWhere('is_break', true);
+        $this->assertNotNull($breakSlot);
+        $this->assertEquals('11:00', substr($breakSlot->start_time, 0, 5));
+        $this->assertEquals('12:00', substr($breakSlot->end_time, 0, 5));
+        $this->assertContains('monday', $breakSlot->days);
+
+        // Check Friday period exists
+        $fridayPeriod = $slots->first(fn ($s) => ! empty($s->days) && in_array('friday', $s->days, true) && ! $s->is_break);
+        $this->assertNotNull($fridayPeriod);
+        $this->assertEquals('08:00', substr($fridayPeriod->start_time, 0, 5));
+    }
+
+    public function test_step2_curriculum_subject_weightage_per_class(): void
+    {
+        [$user, $institute, $session] = $this->createInstituteContext();
+
+        $teacher = User::factory()->create(['name' => 'Sir Tariq']);
+        InstituteUser::create(['user_id' => $teacher->id, 'institute_id' => $institute->id, 'is_active' => true]);
+
+        $class = AcademicClass::create(['institute_id' => $institute->id, 'name' => 'Grade 9', 'code' => 'G9']);
+        $subMath = Subject::create(['institute_id' => $institute->id, 'name' => 'Mathematics', 'code' => 'MATH']);
+        $subSci = Subject::create(['institute_id' => $institute->id, 'name' => 'Science', 'code' => 'SCI']);
+        $subIsl = Subject::create(['institute_id' => $institute->id, 'name' => 'Islamiat', 'code' => 'ISL']);
+
+        SubjectAllocation::create(['session_id' => $session->id, 'class_id' => $class->id, 'subject_id' => $subMath->id, 'teacher_user_id' => $teacher->id]);
+        SubjectAllocation::create(['session_id' => $session->id, 'class_id' => $class->id, 'subject_id' => $subSci->id, 'teacher_user_id' => $teacher->id]);
+        SubjectAllocation::create(['session_id' => $session->id, 'class_id' => $class->id, 'subject_id' => $subIsl->id, 'teacher_user_id' => $teacher->id]);
+
+        Sanctum::actingAs($user);
+
+        // 1. Read Class Curriculum
+        $curriculumReadResponse = $this->getJson("/api/institutes/timetable/curriculum?class_id={$class->id}&session_id={$session->id}");
+        $curriculumReadResponse->assertOk();
+        $curriculumReadResponse->assertJsonCount(3, 'data.curriculum');
+
+        // 2. Save Custom Subject Weightages (Math: 6, Science: 5, Islamiat: 3)
+        $curriculumSaveResponse = $this->postJson('/api/institutes/timetable/curriculum', [
+            'session_id' => $session->id,
+            'class_id' => $class->id,
+            'weightages' => [
+                ['subject_id' => $subMath->id, 'weekly_periods' => 6],
+                ['subject_id' => $subSci->id, 'weekly_periods' => 5],
+                ['subject_id' => $subIsl->id, 'weekly_periods' => 3],
+            ],
+        ]);
+
+        $curriculumSaveResponse->assertOk();
+        $this->assertDatabaseHas('timetable_workloads', [
+            'session_id' => $session->id,
+            'class_id' => $class->id,
+            'subject_id' => $subMath->id,
+            'weekly_periods' => 6,
+        ]);
+        $this->assertDatabaseHas('timetable_workloads', [
+            'session_id' => $session->id,
+            'class_id' => $class->id,
+            'subject_id' => $subSci->id,
+            'weekly_periods' => 5,
+        ]);
+    }
+
+    public function test_unified_wizard_generation_with_shifts_and_curriculum(): void
+    {
+        [$user, $institute, $session] = $this->createInstituteContext();
+
+        $teacher1 = User::factory()->create(['name' => 'Sir Math']);
+        $teacher2 = User::factory()->create(['name' => 'Mam Science']);
+        $teacher3 = User::factory()->create(['name' => 'Qari Islamiat']);
+
+        foreach ([$teacher1, $teacher2, $teacher3] as $t) {
+            InstituteUser::create(['user_id' => $t->id, 'institute_id' => $institute->id, 'is_active' => true]);
+        }
+
+        $class = AcademicClass::create(['institute_id' => $institute->id, 'name' => 'Grade 10', 'code' => 'G10']);
+        $subMath = Subject::create(['institute_id' => $institute->id, 'name' => 'Mathematics', 'code' => 'MATH']);
+        $subSci = Subject::create(['institute_id' => $institute->id, 'name' => 'Science', 'code' => 'SCI']);
+        $subIsl = Subject::create(['institute_id' => $institute->id, 'name' => 'Islamiat', 'code' => 'ISL']);
+
+        SubjectAllocation::create(['session_id' => $session->id, 'class_id' => $class->id, 'subject_id' => $subMath->id, 'teacher_user_id' => $teacher1->id]);
+        SubjectAllocation::create(['session_id' => $session->id, 'class_id' => $class->id, 'subject_id' => $subSci->id, 'teacher_user_id' => $teacher2->id]);
+        SubjectAllocation::create(['session_id' => $session->id, 'class_id' => $class->id, 'subject_id' => $subIsl->id, 'teacher_user_id' => $teacher3->id]);
+
+        Sanctum::actingAs($user);
+
+        // Run Unified All-In-One Wizard: Step 1 (Timing) + Step 2 (Curriculum: Math=6, Sci=5, Isl=3) + Step 3 (Generate)
+        $wizardResponse = $this->postJson('/api/institutes/timetable/wizard-generate', [
+            'session_id' => $session->id,
+            'timing' => [
+                'period_duration' => 40,
+                'standard_days' => [
+                    'days' => ['monday', 'tuesday', 'wednesday', 'thursday', 'saturday'],
+                    'start_time' => '08:00',
+                    'end_time' => '13:30',
+                    'has_break' => true,
+                    'break_start' => '11:00',
+                    'break_end' => '12:00',
+                ],
+                'friday' => [
+                    'days' => ['friday'],
+                    'start_time' => '08:00',
+                    'end_time' => '12:00',
+                    'has_break' => false,
+                ],
+            ],
+            'curriculum' => [
+                [
+                    'class_id' => $class->id,
+                    'weightages' => [
+                        ['subject_id' => $subMath->id, 'weekly_periods' => 6],
+                        ['subject_id' => $subSci->id, 'weekly_periods' => 5],
+                        ['subject_id' => $subIsl->id, 'weekly_periods' => 3],
+                    ],
+                ],
+            ],
+            'days' => ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'],
+            'overwrite_existing' => true,
+        ]);
+
+        $wizardResponse->assertOk();
+        $wizardResponse->assertJsonPath('data.success', true);
+        $this->assertEquals(14, $wizardResponse->json('data.created_count')); // 6 + 5 + 3 = 14 total lectures!
+
+        // Verify exact subject distribution matches weightages
+        $mathCount = TimetableEntry::where('session_id', $session->id)->where('subject_id', $subMath->id)->count();
+        $sciCount = TimetableEntry::where('session_id', $session->id)->where('subject_id', $subSci->id)->count();
+        $islCount = TimetableEntry::where('session_id', $session->id)->where('subject_id', $subIsl->id)->count();
+
+        $this->assertEquals(6, $mathCount, 'Mathematics weekly periods count mismatch');
+        $this->assertEquals(5, $sciCount, 'Science weekly periods count mismatch');
+        $this->assertEquals(3, $islCount, 'Islamiat weekly periods count mismatch');
+    }
 }

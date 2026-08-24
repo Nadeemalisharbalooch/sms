@@ -7,6 +7,9 @@ use App\Http\Requests\Institute\ExportTimetableRequest;
 use App\Http\Requests\Institute\GenerateTimetableRequest;
 use App\Http\Requests\Institute\GetClassTimetableRequest;
 use App\Http\Requests\Institute\GetTeacherTimetableRequest;
+use App\Http\Requests\Institute\SaveCurriculumWeightageRequest;
+use App\Http\Requests\Institute\SetupAndGenerateTimetableRequest;
+use App\Http\Requests\Institute\SetupTimetableShiftsRequest;
 use App\Http\Requests\Institute\StoreTimetableTimeSlotRequest;
 use App\Http\Requests\Institute\SwapTimetableEntriesRequest;
 use App\Http\Requests\Institute\UpdateTimetableTimeSlotRequest;
@@ -15,8 +18,10 @@ use App\Models\AcademicSection;
 use App\Models\AcademicSession;
 use App\Models\Institute;
 use App\Models\InstituteUser;
+use App\Models\SubjectAllocation;
 use App\Models\TimetableEntry;
 use App\Models\TimetableTimeSlot;
+use App\Models\TimetableWorkload;
 use App\Models\User;
 use App\Services\ResponseService;
 use App\Services\Timetable\TimetableExportService;
@@ -29,6 +34,203 @@ use Symfony\Component\HttpFoundation\Response;
 class TimetableController extends Controller
 {
     private const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+    /**
+     * Step 1: Automated Shift & Time Slot Setup.
+     * Generates non-overlapping periods for Standard Days and Friday.
+     */
+    public function setupShifts(SetupTimetableShiftsRequest $request, TimetableGeneratorService $generator): JsonResponse
+    {
+        $institute = $this->activeInstitute($request);
+        if ($institute === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $validated = $request->validated();
+        $duration = (int) $validated['period_duration'];
+        $standardConfig = $validated['standard_days'];
+        $fridayConfig = $validated['friday'] ?? null;
+
+        $createdSlots = $generator->setupShifts($institute, $duration, $standardConfig, $fridayConfig);
+
+        return ResponseService::success($createdSlots, 'Time slots & shifts generated successfully');
+    }
+
+    /**
+     * Step 2 (Read): Get Class Curriculum & Subject Allocation with Current Weekly Weightages.
+     */
+    public function getCurriculum(Request $request): JsonResponse
+    {
+        $institute = $this->activeInstitute($request);
+        if ($institute === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $classId = $request->integer('class_id');
+        if (! $classId) {
+            return ResponseService::error('Validation failed', 422, ['class_id' => ['The class_id parameter is required.']]);
+        }
+
+        $class = AcademicClass::whereKey($classId)->where('institute_id', $institute->id)->first();
+        if ($class === null) {
+            return ResponseService::notFound('Class not found in active institute');
+        }
+
+        $sessionId = $request->integer('session_id') ?: $this->activeSessionId($institute->id);
+        if ($sessionId === null) {
+            return ResponseService::error('Validation failed', 422, ['session_id' => ['No active academic session exists for the active institute.']]);
+        }
+
+        // Fetch all subject allocations for this class in this session
+        $allocations = SubjectAllocation::query()
+            ->where('session_id', $sessionId)
+            ->where('class_id', $classId)
+            ->with(['subject', 'teacher'])
+            ->get();
+
+        // Fetch existing saved workloads
+        $workloads = TimetableWorkload::query()
+            ->where('session_id', $sessionId)
+            ->where('class_id', $classId)
+            ->get()
+            ->keyBy('subject_id');
+
+        // Fetch active slots to calculate total weekly slots
+        $allSlots = TimetableTimeSlot::where('institute_id', $institute->id)->where('is_active', true)->where('is_break', false)->get();
+        $totalWeeklyPeriods = 0;
+        foreach (self::DAYS as $day) {
+            $matching = $allSlots->filter(fn ($s) => empty($s->days) || in_array($day, $s->days, true));
+            $totalWeeklyPeriods += $matching->count();
+        }
+
+        $subjectCount = $allocations->pluck('subject_id')->unique()->count();
+        $defaultWeightage = $subjectCount > 0 ? (int) max(1, floor($totalWeeklyPeriods / $subjectCount)) : 5;
+
+        $curriculum = [];
+        $uniqueSubjectAllocations = $allocations->unique('subject_id');
+
+        foreach ($uniqueSubjectAllocations as $alloc) {
+            $savedWeightage = $workloads[$alloc->subject_id]->weekly_periods ?? $defaultWeightage;
+
+            $curriculum[] = [
+                'subject_id' => $alloc->subject->id,
+                'subject_name' => $alloc->subject->name,
+                'subject_code' => $alloc->subject->code,
+                'teacher' => $alloc->teacher ? [
+                    'id' => $alloc->teacher->id,
+                    'name' => $alloc->teacher->name,
+                    'email' => $alloc->teacher->email,
+                ] : null,
+                'weekly_periods' => $savedWeightage,
+            ];
+        }
+
+        return ResponseService::success([
+            'session_id' => $sessionId,
+            'class' => ['id' => $class->id, 'name' => $class->name],
+            'total_weekly_slots_available' => $totalWeeklyPeriods,
+            'curriculum' => $curriculum,
+        ], 'Class curriculum retrieved successfully');
+    }
+
+    /**
+     * Step 2 (Write): Save Subject Weekly Weightages (Curriculum) for a specific Class / Grade.
+     */
+    public function saveCurriculum(SaveCurriculumWeightageRequest $request): JsonResponse
+    {
+        $institute = $this->activeInstitute($request);
+        if ($institute === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $validated = $request->validated();
+        $sessionId = $validated['session_id'] ?? $this->activeSessionId($institute->id);
+
+        if ($sessionId === null) {
+            return ResponseService::error('Validation failed', 422, ['session_id' => ['No active academic session exists for the active institute.']]);
+        }
+
+        $classId = $validated['class_id'];
+        $saved = [];
+
+        DB::transaction(function () use ($sessionId, $classId, $validated, &$saved) {
+            foreach ($validated['weightages'] as $item) {
+                $workload = TimetableWorkload::updateOrCreate(
+                    [
+                        'session_id' => $sessionId,
+                        'class_id' => $classId,
+                        'subject_id' => $item['subject_id'],
+                    ],
+                    [
+                        'weekly_periods' => $item['weekly_periods'],
+                    ]
+                );
+                $saved[] = $workload;
+            }
+        });
+
+        return ResponseService::success($saved, 'Subject weightages saved successfully');
+    }
+
+    /**
+     * Unified All-In-One Wizard: Step 1 (Timing) + Step 2 (Curriculum) + Step 3 (Generate).
+     */
+    public function setupAndGenerate(SetupAndGenerateTimetableRequest $request, TimetableGeneratorService $generator): JsonResponse
+    {
+        $institute = $this->activeInstitute($request);
+        if ($institute === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $validated = $request->validated();
+        $sessionId = $validated['session_id'] ?? $this->activeSessionId($institute->id);
+
+        if ($sessionId === null) {
+            return ResponseService::error('Validation failed', 422, ['session_id' => ['No active academic session exists for the active institute.']]);
+        }
+
+        // 1. Process Step 1: Shifts & Timings (if provided)
+        if (! empty($validated['timing'])) {
+            $timing = $validated['timing'];
+            $generator->setupShifts(
+                $institute,
+                (int) $timing['period_duration'],
+                $timing['standard_days'],
+                $timing['friday'] ?? null
+            );
+        }
+
+        // 2. Process Step 2: Curriculum Weightages (if provided)
+        $workloadOverrides = [];
+        if (! empty($validated['curriculum'])) {
+            foreach ($validated['curriculum'] as $classCurriculum) {
+                $cId = $classCurriculum['class_id'];
+                foreach ($classCurriculum['weightages'] as $w) {
+                    $workloadOverrides[] = [
+                        'class_id' => $cId,
+                        'subject_id' => $w['subject_id'],
+                        'weekly_periods' => $w['weekly_periods'],
+                    ];
+                }
+            }
+        }
+
+        // 3. Process Step 3: Run Clash-Free Generator
+        try {
+            $result = $generator->generate(
+                $institute,
+                $sessionId,
+                $validated['class_ids'] ?? [],
+                $validated['days'] ?? [],
+                $validated['overwrite_existing'] ?? true,
+                $workloadOverrides
+            );
+
+            return ResponseService::success($result, 'Timetable configured and generated successfully');
+        } catch (\RuntimeException $e) {
+            return ResponseService::error($e->getMessage(), 422);
+        }
+    }
 
     /**
      * List all time slots for the active institute.
@@ -60,13 +262,11 @@ class TimetableController extends Controller
 
         $validated = $request->validated();
 
-        // 1. Unique Name per Institute Check
         $nameError = $this->checkSlotNameUnique($institute->id, $validated['name']);
         if ($nameError !== null) {
             return $nameError;
         }
 
-        // 2. Overlapping Time Slot Check
         $overlapError = $this->checkSlotOverlap($institute->id, $validated['start_time'], $validated['end_time']);
         if ($overlapError !== null) {
             return $overlapError;
@@ -137,7 +337,7 @@ class TimetableController extends Controller
     }
 
     /**
-     * Seed preset time slot structures (e.g. Standard 8-Period, Friday Short, Ramadan).
+     * Seed preset time slot structures.
      */
     public function seedPresetSlots(Request $request): JsonResponse
     {
@@ -261,11 +461,12 @@ class TimetableController extends Controller
             ->with(['subject', 'teacher', 'timeSlot'])
             ->get();
 
-        // Build grid structure
         $grid = [];
         foreach (self::DAYS as $day) {
+            $daySlots = $slots->filter(fn ($s) => empty($s->days) || in_array($day, $s->days, true));
             $grid[$day] = [];
-            foreach ($slots as $slot) {
+
+            foreach ($daySlots as $slot) {
                 $entry = $entries->first(fn ($e) => $e->day_of_week === $day && $e->time_slot_id === $slot->id);
 
                 $grid[$day][] = [
@@ -339,8 +540,10 @@ class TimetableController extends Controller
 
         $grid = [];
         foreach (self::DAYS as $day) {
+            $daySlots = $slots->filter(fn ($s) => empty($s->days) || in_array($day, $s->days, true));
             $grid[$day] = [];
-            foreach ($slots as $slot) {
+
+            foreach ($daySlots as $slot) {
                 $entry = $entries->first(fn ($e) => $e->day_of_week === $day && $e->time_slot_id === $slot->id);
 
                 $grid[$day][] = [
@@ -445,7 +648,6 @@ class TimetableController extends Controller
             return ResponseService::error('Cannot schedule lectures during a break slot.', 422);
         }
 
-        // Check if teacher is already busy at target slot in another class
         $teacherClash = TimetableEntry::query()
             ->where('session_id', $sourceEntry->session_id)
             ->where('teacher_user_id', $sourceEntry->teacher_user_id)
@@ -458,7 +660,6 @@ class TimetableController extends Controller
             return ResponseService::error('Teacher is already occupied in another class at the target time slot.', 422);
         }
 
-        // Check if there is an existing entry in the target slot for this class/section (Swap case)
         $targetEntry = TimetableEntry::query()
             ->where('session_id', $sourceEntry->session_id)
             ->where('class_id', $sourceEntry->class_id)
@@ -468,7 +669,6 @@ class TimetableController extends Controller
             ->where('id', '!=', $sourceEntry->id)
             ->first();
 
-        // If target entry exists, verify reverse teacher clash before swapping
         if ($targetEntry !== null) {
             $reverseTeacherClash = TimetableEntry::query()
                 ->where('session_id', $sourceEntry->session_id)
@@ -485,7 +685,6 @@ class TimetableController extends Controller
 
         DB::transaction(function () use ($sourceEntry, $targetEntry, $targetDay, $targetSlotId) {
             if ($targetEntry !== null) {
-                // Swap places
                 $origDay = $sourceEntry->day_of_week;
                 $origSlot = $sourceEntry->time_slot_id;
 
@@ -505,7 +704,7 @@ class TimetableController extends Controller
     }
 
     /**
-     * Export timetable as HTML view (ready for PDF print) or Excel.
+     * Export timetable as HTML view (ready for PDF print), Excel, or JSON.
      */
     public function export(ExportTimetableRequest $request, TimetableExportService $exportService): Response
     {
@@ -558,8 +757,10 @@ class TimetableController extends Controller
 
             $grid = [];
             foreach (self::DAYS as $day) {
+                $daySlots = $slots->filter(fn ($s) => empty($s->days) || in_array($day, $s->days, true));
                 $grid[$day] = [];
-                foreach ($slots as $slot) {
+
+                foreach ($daySlots as $slot) {
                     $entry = $entries->first(fn ($e) => $e->day_of_week === $day && $e->time_slot_id === $slot->id);
 
                     $grid[$day][] = [
@@ -630,7 +831,6 @@ class TimetableController extends Controller
 
     private function checkSlotOverlap(int $instituteId, string $startTime, string $endTime, ?int $ignoreId = null): ?JsonResponse
     {
-        // Check for time overlap: existing_start < new_end AND existing_end > new_start
         $overlap = TimetableTimeSlot::query()
             ->where('institute_id', $instituteId)
             ->when($ignoreId !== null, fn ($q) => $q->where('id', '!=', $ignoreId))

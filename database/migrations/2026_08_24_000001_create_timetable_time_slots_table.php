@@ -15,6 +15,7 @@ return new class extends Migration
             $table->time('start_time');
             $table->time('end_time');
             $table->boolean('is_break')->default(false);
+            $table->json('days')->nullable(); // e.g. ['monday', 'tuesday', 'wednesday', 'thursday', 'saturday'] or ['friday'], null = all days
             $table->unsignedInteger('sort_order')->default(0);
             $table->boolean('is_active')->default(true);
             $table->timestamps();

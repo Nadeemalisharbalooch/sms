@@ -16,6 +16,7 @@ class TimetableTimeSlot extends Model
         'is_break',
         'sort_order',
         'is_active',
+        'days',
     ];
 
     protected function casts(): array
@@ -25,6 +26,7 @@ class TimetableTimeSlot extends Model
             'is_break' => 'boolean',
             'sort_order' => 'integer',
             'is_active' => 'boolean',
+            'days' => 'array',
         ];
     }
 

@@ -185,6 +185,23 @@ Route::middleware('auth:sanctum')->group(function () {
     // =====================================================================
     // Module 7: Timetable Generator & Scheduling
     // =====================================================================
+    // Step 1: Shifts & Time Slots Setup (Admin Period Duration + Standard Days & Friday Timings)
+    Route::post('institutes/timetable/shifts', [TimetableController::class, 'setupShifts'])
+        ->name('institutes.timetable.shifts.setup');
+    Route::post('institutes/timetable/setup-slots', [TimetableController::class, 'setupShifts'])
+        ->name('institutes.timetable.slots.setup');
+
+    // Step 2: Subject Weightage (Curriculum per Class/Grade)
+    Route::get('institutes/timetable/curriculum', [TimetableController::class, 'getCurriculum'])
+        ->name('institutes.timetable.curriculum.get');
+    Route::post('institutes/timetable/curriculum', [TimetableController::class, 'saveCurriculum'])
+        ->name('institutes.timetable.curriculum.save');
+
+    // Step 3 / Unified All-In-One Wizard: Step 1 (Timing) + Step 2 (Curriculum) + Step 3 (Generate)
+    Route::post('institutes/timetable/wizard-generate', [TimetableController::class, 'setupAndGenerate'])
+        ->name('institutes.timetable.wizard.generate');
+
+    // Individual Slot CRUD
     Route::get('institutes/timetable/slots', [TimetableController::class, 'indexSlots'])
         ->name('institutes.timetable.slots.index');
     Route::post('institutes/timetable/slots', [TimetableController::class, 'storeSlot'])
@@ -196,6 +213,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('institutes/timetable/slots/preset', [TimetableController::class, 'seedPresetSlots'])
         ->name('institutes.timetable.slots.preset');
 
+    // Core Generator
     Route::post('institutes/timetable/generate', [TimetableController::class, 'generate'])
         ->name('institutes.timetable.generate');
 
