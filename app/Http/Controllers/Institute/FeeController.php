@@ -591,6 +591,165 @@ class FeeController extends Controller
     }
 
     /**
+     * GET: Retrieve generated vouchers, list batches, or preview upcoming voucher generation.
+     */
+    public function indexGenerateVouchers(Request $request): JsonResponse
+    {
+        $instituteId = $this->activeInstituteId($request);
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $sessionId = $request->integer('session_id') ?: $this->activeSessionId($instituteId);
+        if ($sessionId === null) {
+            return ResponseService::error('Validation failed', 422, [
+                'session_id' => ['No active academic session exists for the active institute.'],
+            ]);
+        }
+
+        $billingMonth = $request->input('billing_month');
+        $classId = $request->integer('class_id') ?: null;
+        $sectionId = $request->integer('section_id') ?: null;
+        $status = $request->input('status');
+        $search = $request->string('search')->trim()->toString();
+        $isPreview = $request->boolean('preview');
+        $perPage = min(100, max(5, $request->integer('per_page', 25)));
+
+        // Preview Mode
+        if ($isPreview && $billingMonth) {
+            $studentsQuery = Student::query()
+                ->where('institute_id', $instituteId)
+                ->whereHas('enrollments', function ($q) use ($sessionId, $classId, $sectionId) {
+                    $q->where('session_id', $sessionId)
+                        ->when($classId !== null, fn ($cq) => $cq->where('class_id', $classId))
+                        ->when($sectionId !== null, fn ($sq) => $sq->where('section_id', $sectionId));
+                });
+
+            $totalEligible = $studentsQuery->count();
+            $alreadyGeneratedStudentIds = FeeVoucher::query()
+                ->where('institute_id', $instituteId)
+                ->where('session_id', $sessionId)
+                ->where('billing_month', $billingMonth)
+                ->pluck('student_id');
+
+            $alreadyGeneratedCount = $alreadyGeneratedStudentIds->count();
+            $pendingGenerationCount = max(0, $totalEligible - $alreadyGeneratedCount);
+
+            return ResponseService::success([
+                'mode' => 'preview',
+                'session_id' => $sessionId,
+                'billing_month' => $billingMonth,
+                'class_id' => $classId,
+                'section_id' => $sectionId,
+                'total_eligible_students' => $totalEligible,
+                'already_generated_count' => $alreadyGeneratedCount,
+                'pending_generation_count' => $pendingGenerationCount,
+            ], 'Voucher generation preview retrieved successfully');
+        }
+
+        // Listing Mode
+        $query = FeeVoucher::query()
+            ->where('institute_id', $instituteId)
+            ->where('session_id', $sessionId)
+            ->when($billingMonth !== null, fn ($q) => $q->where('billing_month', $billingMonth))
+            ->when($status !== null && $status !== 'all', fn ($q) => $q->where('status', $status))
+            ->when($classId !== null || $sectionId !== null, function ($q) use ($sessionId, $classId, $sectionId) {
+                $q->whereHas('student.enrollments', function ($eq) use ($sessionId, $classId, $sectionId) {
+                    $eq->where('session_id', $sessionId)
+                        ->when($classId !== null, fn ($cq) => $cq->where('class_id', $classId))
+                        ->when($sectionId !== null, fn ($sq) => $sq->where('section_id', $sectionId));
+                });
+            })
+            ->when($search !== '', function ($q) use ($search, $sessionId) {
+                $q->where(function ($sq) use ($search, $sessionId) {
+                    $sq->where('id', is_numeric($search) ? (int) $search : 0)
+                        ->orWhereHas('student', function ($stq) use ($search, $sessionId) {
+                            $stq->where('first_name', 'like', "%{$search}%")
+                                ->orWhere('last_name', 'like', "%{$search}%")
+                                ->orWhereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$search}%"])
+                                ->orWhereHas('enrollments', fn ($eq) => $eq->where('session_id', $sessionId)->where('roll_number', 'like', "%{$search}%"));
+                        });
+                });
+            })
+            ->with([
+                'items',
+                'student.enrollments' => function ($eq) use ($sessionId) {
+                    $eq->where('session_id', $sessionId)->with(['academicClass', 'section']);
+                },
+            ])
+            ->latest('id');
+
+        // Summary metrics before pagination
+        $allMatching = (clone $query)->get();
+        $summary = [
+            'total_vouchers' => $allMatching->count(),
+            'total_amount' => round((float) $allMatching->sum('total_amount'), 2),
+            'total_paid' => round((float) $allMatching->sum('paid_amount'), 2),
+            'total_balance_due' => round((float) $allMatching->sum(fn ($v) => $v->total_amount - $v->paid_amount), 2),
+            'paid_count' => $allMatching->where('status', 'paid')->count(),
+            'unpaid_count' => $allMatching->where('status', 'unpaid')->count(),
+            'partial_count' => $allMatching->where('status', 'partial')->count(),
+        ];
+
+        $paginated = $query->paginate($perPage);
+
+        // Transform collection for clean frontend consumption
+        $vouchers = $paginated->getCollection()->map(function ($voucher) {
+            $enrollment = $voucher->student?->enrollments?->first();
+
+            return [
+                'id' => $voucher->id,
+                'voucher_no' => $voucher->id,
+                'billing_month' => $voucher->billing_month,
+                'due_date' => $voucher->due_date?->toDateString(),
+                'total_amount' => $voucher->total_amount,
+                'paid_amount' => $voucher->paid_amount,
+                'balance_due' => round($voucher->total_amount - $voucher->paid_amount, 2),
+                'status' => $voucher->status,
+                'student' => $voucher->student ? [
+                    'id' => $voucher->student->id,
+                    'name' => trim($voucher->student->first_name.' '.$voucher->student->last_name),
+                    'roll_number' => $enrollment?->roll_number,
+                    'class' => $enrollment?->academicClass ? [
+                        'id' => $enrollment->academicClass->id,
+                        'name' => $enrollment->academicClass->name,
+                    ] : null,
+                    'section' => $enrollment?->section ? [
+                        'id' => $enrollment->section->id,
+                        'name' => $enrollment->section->name,
+                    ] : null,
+                ] : null,
+                'items' => $voucher->items->map(fn ($item) => [
+                    'id' => $item->id,
+                    'fee_name' => $item->fee_name,
+                    'amount' => $item->amount,
+                ]),
+                'created_at' => $voucher->created_at?->toISOString(),
+            ];
+        });
+
+        // Available billing months for filter dropdown
+        $availableMonths = FeeVoucher::query()
+            ->where('institute_id', $instituteId)
+            ->where('session_id', $sessionId)
+            ->distinct()
+            ->orderByDesc('billing_month')
+            ->pluck('billing_month');
+
+        return ResponseService::success([
+            'summary' => $summary,
+            'available_months' => $availableMonths,
+            'vouchers' => $vouchers,
+            'pagination' => [
+                'current_page' => $paginated->currentPage(),
+                'last_page' => $paginated->lastPage(),
+                'per_page' => $paginated->perPage(),
+                'total' => $paginated->total(),
+            ],
+        ], 'Fee vouchers retrieved successfully');
+    }
+
+    /**
      * Bulk delete generated fee vouchers (with safety checks for paid vouchers).
      */
     public function destroyVouchers(DeleteVouchersRequest $request): JsonResponse

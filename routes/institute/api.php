@@ -155,10 +155,14 @@ Route::middleware('auth:sanctum')->group(function () {
         ->name('institutes.fees.student-assignments.destroy');
 
     // API 4: Smart Bulk Voucher Generation (The Engine)
+    Route::get('institutes/fees/generate-vouchers', [FeeController::class, 'indexGenerateVouchers'])
+        ->name('institutes.fees.generate-vouchers.index');
     Route::post('institutes/fees/generate-vouchers', [FeeController::class, 'generateVouchers'])
         ->name('institutes.fees.generate-vouchers');
     Route::delete('institutes/fees/generate-vouchers', [FeeController::class, 'destroyVouchers'])
         ->name('institutes.fees.generate-vouchers.destroy');
+    Route::delete('institutes/fees/generate-vouchers/{voucherId}', [FeeController::class, 'destroyVoucher'])
+        ->name('institutes.fees.generate-vouchers.destroySingle');
     Route::delete('institutes/fees/vouchers', [FeeController::class, 'destroyVouchers'])
         ->name('institutes.fees.vouchers.destroyBulk');
     Route::delete('institutes/fees/vouchers/{voucherId}', [FeeController::class, 'destroyVoucher'])

@@ -520,4 +520,126 @@ class GenerateVouchersTest extends TestCase
         $response->assertOk();
         $this->assertDatabaseMissing('fee_vouchers', ['id' => $voucher->id]);
     }
+
+    public function test_can_get_generated_vouchers_with_filters_and_summary(): void
+    {
+        $user = User::factory()->create();
+        $institute = Institute::create(['name' => 'City Academy']);
+
+        InstituteUser::create([
+            'user_id' => $user->id,
+            'institute_id' => $institute->id,
+            'is_active' => true,
+        ]);
+
+        $session = AcademicSession::create([
+            'institute_id' => $institute->id,
+            'name' => '2026-2027',
+            'start_date' => '2026-08-01',
+            'end_date' => '2027-06-30',
+            'is_active' => true,
+        ]);
+
+        $class = AcademicClass::create([
+            'institute_id' => $institute->id,
+            'name' => 'Class 10',
+            'code' => 'C10',
+        ]);
+
+        $student = Student::create([
+            'institute_id' => $institute->id,
+            'first_name' => 'Zain',
+            'last_name' => 'Malik',
+            'dob' => '2010-05-10',
+            'gender' => 'male',
+            'guardian_name' => 'Malik',
+            'guardian_phone' => '03001234567',
+            'admission_date' => '2026-08-01',
+        ]);
+
+        Enrollment::create([
+            'session_id' => $session->id,
+            'class_id' => $class->id,
+            'student_id' => $student->id,
+            'roll_number' => '101',
+        ]);
+
+        $voucher = FeeVoucher::create([
+            'institute_id' => $institute->id,
+            'session_id' => $session->id,
+            'student_id' => $student->id,
+            'billing_month' => '2026-08',
+            'due_date' => '2026-08-10',
+            'total_amount' => 5000,
+            'paid_amount' => 2000,
+            'status' => 'partial',
+        ]);
+
+        $voucher->items()->create(['fee_name' => 'Tuition Fee', 'amount' => 5000]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->getJson('/api/institutes/fees/generate-vouchers?billing_month=2026-08');
+        $response->assertOk();
+        $response->assertJsonPath('data.summary.total_vouchers', 1);
+        $response->assertJsonPath('data.summary.total_amount', 5000);
+        $response->assertJsonPath('data.summary.total_paid', 2000);
+        $response->assertJsonPath('data.summary.total_balance_due', 3000);
+        $response->assertJsonPath('data.vouchers.0.student.name', 'Zain Malik');
+        $response->assertJsonPath('data.vouchers.0.student.class.name', 'Class 10');
+        $response->assertJsonPath('data.vouchers.0.items.0.fee_name', 'Tuition Fee');
+    }
+
+    public function test_can_get_generate_vouchers_preview(): void
+    {
+        $user = User::factory()->create();
+        $institute = Institute::create(['name' => 'City Academy']);
+
+        InstituteUser::create([
+            'user_id' => $user->id,
+            'institute_id' => $institute->id,
+            'is_active' => true,
+        ]);
+
+        $session = AcademicSession::create([
+            'institute_id' => $institute->id,
+            'name' => '2026-2027',
+            'start_date' => '2026-08-01',
+            'end_date' => '2027-06-30',
+            'is_active' => true,
+        ]);
+
+        $class = AcademicClass::create([
+            'institute_id' => $institute->id,
+            'name' => 'Class 9',
+            'code' => 'C9',
+        ]);
+
+        $student = Student::create([
+            'institute_id' => $institute->id,
+            'first_name' => 'Ahmed',
+            'last_name' => 'Raza',
+            'dob' => '2011-05-10',
+            'gender' => 'male',
+            'guardian_name' => 'Raza',
+            'guardian_phone' => '03001234567',
+            'admission_date' => '2026-08-01',
+        ]);
+
+        Enrollment::create([
+            'session_id' => $session->id,
+            'class_id' => $class->id,
+            'student_id' => $student->id,
+            'roll_number' => '901',
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->getJson('/api/institutes/fees/generate-vouchers?billing_month=2026-11&preview=true');
+        $response->assertOk();
+        $response->assertJsonPath('data.mode', 'preview');
+        $response->assertJsonPath('data.total_eligible_students', 1);
+        $response->assertJsonPath('data.already_generated_count', 0);
+        $response->assertJsonPath('data.pending_generation_count', 1);
+    }
 }
