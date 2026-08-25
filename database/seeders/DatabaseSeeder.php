@@ -21,6 +21,9 @@ class DatabaseSeeder extends Seeder
         // Seed common subjects for institutes.
         $this->call(SubjectSeeder::class);
 
+        // Seed 50 teachers for testing and allocations.
+        $this->call(TeacherSeeder::class);
+
         // Avoid duplicate seed failures (idempotent).
         User::updateOrCreate(
             ['email' => 'test@example.com'],
