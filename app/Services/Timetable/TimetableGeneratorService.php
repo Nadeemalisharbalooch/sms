@@ -506,6 +506,58 @@ class TimetableGeneratorService
                     }
                 }
 
+                // If direct placement was not possible, try an augmenting shift/swap
+                if ($bestSlot === null) {
+                    foreach ($daySlots as $day => $slotsForDay) {
+                        if ($bestSlot !== null) {
+                            break;
+                        }
+                        foreach ($slotsForDay as $slot) {
+                            $slotId = $slot->id;
+
+                            if (isset($teacherBusy[$lecture['teacher_user_id']][$day][$slotId])) {
+                                continue;
+                            }
+
+                            if (isset($classBusy[$groupKey][$day][$slotId])) {
+                                $existingEntryIndex = null;
+                                foreach ($allEntriesToInsert as $idx => $entry) {
+                                    $eKey = $entry['class_id'].'_'.($entry['section_id'] ?? 'null');
+                                    if ($eKey === $groupKey && $entry['day_of_week'] === $day && $entry['time_slot_id'] === $slotId) {
+                                        $existingEntryIndex = $idx;
+                                        break;
+                                    }
+                                }
+
+                                if ($existingEntryIndex !== null) {
+                                    $existingEntry = $allEntriesToInsert[$existingEntryIndex];
+                                    $existingTeacherId = $existingEntry['teacher_user_id'];
+
+                                    foreach ($daySlots as $day2 => $slotsForDay2) {
+                                        foreach ($slotsForDay2 as $slot2) {
+                                            $slotId2 = $slot2->id;
+
+                                            if (! isset($classBusy[$groupKey][$day2][$slotId2]) && ! isset($teacherBusy[$existingTeacherId][$day2][$slotId2])) {
+                                                unset($classBusy[$groupKey][$day][$slotId]);
+                                                unset($teacherBusy[$existingTeacherId][$day][$slotId]);
+
+                                                $allEntriesToInsert[$existingEntryIndex]['day_of_week'] = $day2;
+                                                $allEntriesToInsert[$existingEntryIndex]['time_slot_id'] = $slotId2;
+
+                                                $classBusy[$groupKey][$day2][$slotId2] = true;
+                                                $teacherBusy[$existingTeacherId][$day2][$slotId2] = true;
+
+                                                $bestSlot = ['day' => $day, 'slot_id' => $slotId];
+                                                break 2;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if ($bestSlot !== null) {
                     $day = $bestSlot['day'];
                     $slotId = $bestSlot['slot_id'];
@@ -533,6 +585,13 @@ class TimetableGeneratorService
 
                 if (! $assigned) {
                     $unassignedLecturesCount++;
+                    $unassignedDetails[] = [
+                        'class_id' => $classId,
+                        'section_id' => $sectionId,
+                        'subject_id' => $lecture['subject_id'],
+                        'teacher_user_id' => $lecture['teacher_user_id'],
+                        'reason' => "No free period slot available without teacher/class conflict, or class capacity ({$totalSlotsPerWeek} periods/week) was exceeded.",
+                    ];
                 }
             }
         }
@@ -553,10 +612,13 @@ class TimetableGeneratorService
 
         return [
             'success' => true,
-            'message' => 'Timetable generated successfully.',
+            'message' => $unassignedLecturesCount > 0
+                ? "Timetable generated with {$unassignedLecturesCount} unassigned lecture(s). See unassigned_details."
+                : 'Timetable generated successfully.',
             'created_count' => count($allEntriesToInsert),
             'classes_scheduled' => $classesScheduledCount,
             'unassigned_count' => $unassignedLecturesCount,
+            'unassigned_details' => $unassignedDetails ?? [],
             'days' => array_keys($daySlots),
             'total_weekly_periods' => $totalSlotsPerWeek,
         ];
