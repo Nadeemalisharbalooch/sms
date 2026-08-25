@@ -470,6 +470,14 @@ class TimetableController extends Controller
         $sectionId = $validated['section_id'] ?? null;
         $section = $sectionId !== null ? AcademicSection::find($sectionId) : null;
 
+        $availableSections = $class->sections()->where('is_active', true)->get(['id', 'name', 'code']);
+
+        // Default to first active section if class has sections but section_id was not explicitly passed
+        if ($sectionId === null && $availableSections->isNotEmpty()) {
+            $section = $availableSections->first();
+            $sectionId = $section->id;
+        }
+
         $slots = TimetableTimeSlot::query()
             ->where('institute_id', $institute->id)
             ->where('is_active', true)
@@ -479,7 +487,7 @@ class TimetableController extends Controller
         $entries = TimetableEntry::query()
             ->where('session_id', $sessionId)
             ->where('class_id', $class->id)
-            ->when($sectionId !== null, fn ($q) => $q->where('section_id', $sectionId))
+            ->when($sectionId !== null, fn ($q) => $q->where('section_id', $sectionId), fn ($q) => $q->whereNull('section_id'))
             ->with(['subject', 'teacher', 'timeSlot'])
             ->get();
 
@@ -517,6 +525,7 @@ class TimetableController extends Controller
             'session_id' => $sessionId,
             'class' => ['id' => $class->id, 'name' => $class->name],
             'section' => $section ? ['id' => $section->id, 'name' => $section->name] : null,
+            'available_sections' => $availableSections,
             'time_slots' => $slots,
             'schedule' => $grid,
         ], 'Class timetable retrieved successfully');
@@ -602,7 +611,7 @@ class TimetableController extends Controller
     }
 
     /**
-     * Get institute master grid timetable.
+     * Get institute master grid timetable (All classes, sections, subjects & teachers).
      */
     public function masterSchedule(Request $request): JsonResponse
     {
@@ -618,7 +627,7 @@ class TimetableController extends Controller
 
         $classes = AcademicClass::query()
             ->where('institute_id', $institute->id)
-            ->with('sections')
+            ->with(['sections' => fn ($q) => $q->where('is_active', true)->orderBy('name')])
             ->orderBy('display_order')
             ->get();
 
@@ -633,11 +642,94 @@ class TimetableController extends Controller
             ->with(['academicClass', 'section', 'subject', 'teacher', 'timeSlot'])
             ->get();
 
+        // 1. Build Class-wise Full Weekly Schedules (ready for Frontend Class Grid tabs)
+        $classesSchedules = [];
+        foreach ($classes as $class) {
+            $sections = $class->sections;
+            $sectionList = $sections->isNotEmpty() ? $sections : [null];
+
+            foreach ($sectionList as $sec) {
+                $secId = $sec?->id;
+
+                $classEntries = $entries->filter(function ($e) use ($class, $secId) {
+                    return $e->class_id === $class->id && ($secId !== null ? $e->section_id === $secId : true);
+                });
+
+                $classGrid = [];
+                foreach (self::DAYS as $day) {
+                    $daySlots = $slots->filter(fn ($s) => empty($s->days) || in_array($day, $s->days, true));
+                    $classGrid[$day] = [];
+
+                    foreach ($daySlots as $slot) {
+                        $entry = $classEntries->first(fn ($e) => $e->day_of_week === $day && $e->time_slot_id === $slot->id);
+
+                        $classGrid[$day][] = [
+                            'time_slot_id' => $slot->id,
+                            'time_slot_name' => $slot->name,
+                            'start_time' => $slot->start_time,
+                            'end_time' => $slot->end_time,
+                            'is_break' => $slot->is_break,
+                            'entry_id' => $entry?->id,
+                            'subject' => $entry?->subject ? [
+                                'id' => $entry->subject->id,
+                                'name' => $entry->subject->name,
+                                'code' => $entry->subject->code,
+                            ] : null,
+                            'teacher' => $entry?->teacher ? [
+                                'id' => $entry->teacher->id,
+                                'name' => $entry->teacher->name,
+                                'email' => $entry->teacher->email,
+                            ] : null,
+                            'room_number' => $entry?->room_number,
+                        ];
+                    }
+                }
+
+                $classesSchedules[] = [
+                    'class' => ['id' => $class->id, 'name' => $class->name, 'code' => $class->code],
+                    'section' => $sec ? ['id' => $sec->id, 'name' => $sec->name, 'code' => $sec->code] : null,
+                    'schedule' => $classGrid,
+                ];
+            }
+        }
+
+        // 2. Build Day-wise Matrix (Day -> Slot -> Active Lectures in all classes)
+        $dayMatrix = [];
+        foreach (self::DAYS as $day) {
+            $daySlots = $slots->filter(fn ($s) => empty($s->days) || in_array($day, $s->days, true));
+            $dayMatrix[$day] = [];
+
+            foreach ($daySlots as $slot) {
+                $slotEntries = $entries->filter(fn ($e) => $e->day_of_week === $day && $e->time_slot_id === $slot->id);
+
+                $allocationsInSlot = [];
+                foreach ($slotEntries as $e) {
+                    $allocationsInSlot[] = [
+                        'entry_id' => $e->id,
+                        'class' => ['id' => $e->academicClass->id, 'name' => $e->academicClass->name],
+                        'section' => $e->section ? ['id' => $e->section->id, 'name' => $e->section->name] : null,
+                        'subject' => ['id' => $e->subject->id, 'name' => $e->subject->name, 'code' => $e->subject->code],
+                        'teacher' => ['id' => $e->teacher->id, 'name' => $e->teacher->name, 'email' => $e->teacher->email],
+                        'room_number' => $e->room_number,
+                    ];
+                }
+
+                $dayMatrix[$day][] = [
+                    'time_slot_id' => $slot->id,
+                    'time_slot_name' => $slot->name,
+                    'start_time' => $slot->start_time,
+                    'end_time' => $slot->end_time,
+                    'is_break' => $slot->is_break,
+                    'allocations' => $allocationsInSlot,
+                ];
+            }
+        }
+
         return ResponseService::success([
             'session_id' => $sessionId,
-            'time_slots' => $slots,
-            'classes' => $classes,
-            'entries' => $entries,
+            'classes_schedules' => $classesSchedules,
+            'day_matrix' => $dayMatrix,
+            'total_entries' => $entries->count(),
         ], 'Master timetable retrieved successfully');
     }
 

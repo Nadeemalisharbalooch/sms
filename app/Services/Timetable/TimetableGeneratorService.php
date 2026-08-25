@@ -313,10 +313,11 @@ class TimetableGeneratorService
             throw new \RuntimeException('No matching time slots found for the selected days.');
         }
 
-        // Fetch target classes
+        // Fetch target classes with their active sections
         $classesQuery = AcademicClass::query()
             ->where('institute_id', $institute->id)
-            ->where('is_active', true);
+            ->where('is_active', true)
+            ->with(['sections' => fn ($q) => $q->where('is_active', true)->orderBy('name')]);
 
         if (! empty($classIds)) {
             $classesQuery->whereIn('id', $classIds);
@@ -364,8 +365,44 @@ class TimetableGeneratorService
             ->get()
             ->keyBy(fn ($w) => $w->class_id.'_'.$w->subject_id);
 
-        // Group allocations by Class and Section
-        $groupedAllocations = $allocations->groupBy(fn ($item) => $item->class_id.'_'.($item->section_id ?? 'null'));
+        // Build scheduling groups per class and per section
+        $groupedAllocations = [];
+
+        foreach ($classes as $class) {
+            $activeSections = $class->sections;
+
+            if ($activeSections->isNotEmpty()) {
+                // Class has sections: generate timetable for each section
+                foreach ($activeSections as $section) {
+                    $sectionAllocs = $allocations->where('class_id', $class->id)->where('section_id', $section->id);
+
+                    // Fallback to class-level allocations if section has no specific allocations
+                    if ($sectionAllocs->isEmpty()) {
+                        $classLevelAllocs = $allocations->where('class_id', $class->id)->whereNull('section_id');
+                        $sectionAllocs = $classLevelAllocs->map(function ($alloc) use ($section) {
+                            $cloned = clone $alloc;
+                            $cloned->section_id = $section->id;
+
+                            return $cloned;
+                        });
+                    }
+
+                    if ($sectionAllocs->isNotEmpty()) {
+                        $groupedAllocations[$class->id.'_'.$section->id] = $sectionAllocs;
+                    }
+                }
+            } else {
+                // Class has no sections: generate for class level
+                $classAllocs = $allocations->where('class_id', $class->id);
+                if ($classAllocs->isNotEmpty()) {
+                    $groupedAllocations[$class->id.'_null'] = $classAllocs;
+                }
+            }
+        }
+
+        if (empty($groupedAllocations)) {
+            throw new \RuntimeException('No subject allocations could be mapped to classes or sections.');
+        }
 
         // Calculate total available slots across selected days
         $totalSlotsPerWeek = array_sum(array_map(fn ($slots) => count($slots), $daySlots));

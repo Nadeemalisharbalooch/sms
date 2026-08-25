@@ -199,7 +199,9 @@ class TimetableTest extends TestCase
         // Master Schedule View
         $masterResponse = $this->getJson('/api/institutes/timetable/master');
         $masterResponse->assertOk();
-        $masterResponse->assertJsonCount(1, 'data.entries');
+        $masterResponse->assertJsonPath('data.total_entries', 1);
+        $this->assertNotEmpty($masterResponse->json('data.classes_schedules'));
+        $this->assertNotEmpty($masterResponse->json('data.day_matrix'));
     }
 
     public function test_can_swap_entries_and_detects_clashes(): void
@@ -583,5 +585,77 @@ class TimetableTest extends TestCase
 
         $this->assertEquals(3, TimetableEntry::where('session_id', $session->id)->where('subject_id', $sub3->id)->count());
         $this->assertEquals(3, TimetableEntry::where('session_id', $session->id)->where('subject_id', $sub4->id)->count());
+    }
+
+    public function test_auto_generates_timetable_for_all_sections_of_a_class(): void
+    {
+        [$user, $institute, $session] = $this->createInstituteContext();
+
+        $teacher1 = User::factory()->create(['name' => 'Sir Math']);
+        $teacher2 = User::factory()->create(['name' => 'Sir Science']);
+
+        foreach ([$teacher1, $teacher2] as $t) {
+            InstituteUser::create(['user_id' => $t->id, 'institute_id' => $institute->id, 'is_active' => true]);
+        }
+
+        // Class 9 with 2 Sections: Section A and Section B
+        $class9 = AcademicClass::create(['institute_id' => $institute->id, 'name' => 'Grade 9', 'code' => 'G9']);
+        $secA = AcademicSection::create(['class_id' => $class9->id, 'name' => 'Section A', 'code' => '9A']);
+        $secB = AcademicSection::create(['class_id' => $class9->id, 'name' => 'Section B', 'code' => '9B']);
+
+        $subMath = Subject::create(['institute_id' => $institute->id, 'name' => 'Mathematics', 'code' => 'MATH']);
+        $subSci = Subject::create(['institute_id' => $institute->id, 'name' => 'Science', 'code' => 'SCI']);
+
+        // Allocations assigned at class level (section_id = null)
+        SubjectAllocation::create(['session_id' => $session->id, 'class_id' => $class9->id, 'section_id' => null, 'subject_id' => $subMath->id, 'teacher_user_id' => $teacher1->id]);
+        SubjectAllocation::create(['session_id' => $session->id, 'class_id' => $class9->id, 'section_id' => null, 'subject_id' => $subSci->id, 'teacher_user_id' => $teacher2->id]);
+
+        Sanctum::actingAs($user);
+
+        $payload = [
+            'periodDuration' => 45,
+            'daysConfig' => [
+                ['name' => 'Monday', 'active' => true, 'startTime' => '08:00', 'endTime' => '12:00', 'hasBreak' => false],
+                ['name' => 'Tuesday', 'active' => true, 'startTime' => '08:00', 'endTime' => '12:00', 'hasBreak' => false],
+            ],
+            'curriculum' => [
+                (string) $class9->id => [
+                    (string) $subMath->id => 2,
+                    (string) $subSci->id => 2,
+                ],
+            ],
+        ];
+
+        $response = $this->postJson('/api/institutes/timetable/wizard-generate', $payload);
+        $response->assertOk();
+        $response->assertJsonPath('data.success', true);
+
+        // Verify Section A entries exist (2 Math + 2 Science = 4)
+        $secAEntries = TimetableEntry::where('session_id', $session->id)->where('class_id', $class9->id)->where('section_id', $secA->id)->get();
+        $this->assertCount(4, $secAEntries);
+
+        // Verify Section B entries exist (2 Math + 2 Science = 4)
+        $secBEntries = TimetableEntry::where('session_id', $session->id)->where('class_id', $class9->id)->where('section_id', $secB->id)->get();
+        $this->assertCount(4, $secBEntries);
+
+        // Verify Teacher 1 is never double booked across Section A and Section B at the same time
+        foreach ($secAEntries as $entryA) {
+            $clashExists = $secBEntries->contains(function ($entryB) use ($entryA) {
+                return $entryB->teacher_user_id === $entryA->teacher_user_id
+                    && $entryB->day_of_week === $entryA->day_of_week
+                    && $entryB->time_slot_id === $entryA->time_slot_id;
+            });
+            $this->assertFalse($clashExists, 'Teacher clash detected between Section A and Section B!');
+        }
+
+        // Test GET class schedule for Section A
+        $viewSecA = $this->getJson("/api/institutes/timetable/class?class_id={$class9->id}&section_id={$secA->id}");
+        $viewSecA->assertOk();
+        $viewSecA->assertJsonPath('data.section.name', 'Section A');
+
+        // Test GET class schedule for Section B
+        $viewSecB = $this->getJson("/api/institutes/timetable/class?class_id={$class9->id}&section_id={$secB->id}");
+        $viewSecB->assertOk();
+        $viewSecB->assertJsonPath('data.section.name', 'Section B');
     }
 }
