@@ -429,8 +429,29 @@ class TimetableGeneratorService
             }
         }
 
+        // Pre-fetch names for human-readable diagnostic messages
+        $classNames = $classes->keyBy('id');
+        $sectionNames = $classes->flatMap->sections->keyBy('id');
+        $subjectNames = $allocations->pluck('subject')->unique('id')->keyBy('id');
+        $teacherNames = $allocations->pluck('teacher')->filter()->unique('id')->keyBy('id');
+
+        // Pre-calculate total requested lectures per teacher across all classes
+        $teacherTotalRequested = [];
+        foreach ($groupedAllocations as $classAllocs) {
+            $cId = $classAllocs->first()->class_id;
+            $subCount = $classAllocs->count();
+            $defPerSub = $subCount > 0 ? (int) max(1, floor($totalSlotsPerWeek / $subCount)) : 1;
+
+            foreach ($classAllocs as $alloc) {
+                $wKey = $cId.'_'.$alloc->subject_id;
+                $periodsNeeded = isset($workloads[$wKey]) ? $workloads[$wKey]->weekly_periods : $defPerSub;
+                $teacherTotalRequested[$alloc->teacher_user_id] = ($teacherTotalRequested[$alloc->teacher_user_id] ?? 0) + $periodsNeeded;
+            }
+        }
+
         $allEntriesToInsert = [];
         $unassignedLecturesCount = 0;
+        $unassignedDetails = [];
         $classesScheduledCount = 0;
 
         foreach ($groupedAllocations as $groupKey => $classAllocations) {
@@ -585,12 +606,41 @@ class TimetableGeneratorService
 
                 if (! $assigned) {
                     $unassignedLecturesCount++;
+
+                    $cName = $classNames[$classId]->name ?? "Class #{$classId}";
+                    $sName = $sectionId !== null && isset($sectionNames[$sectionId]) ? $sectionNames[$sectionId]->name : null;
+                    $subName = $subjectNames[$lecture['subject_id']]->name ?? "Subject #{$lecture['subject_id']}";
+                    $tName = $teacherNames[$lecture['teacher_user_id']]->name ?? "Teacher #{$lecture['teacher_user_id']}";
+
+                    $classReqTotal = count($lecturePool);
+                    $teacherReqTotal = $teacherTotalRequested[$lecture['teacher_user_id']] ?? 0;
+
+                    if ($classReqTotal > $totalSlotsPerWeek) {
+                        $issueType = 'Class Capacity Exceeded';
+                        $reasonMsg = "Class [{$cName}] has {$classReqTotal} requested lectures, which exceeds weekly limit ({$totalSlotsPerWeek} periods).";
+                        $suggestion = "Reduce weekly periods in curriculum for Class [{$cName}] to fit {$totalSlotsPerWeek} total periods.";
+                    } elseif ($teacherReqTotal > $totalSlotsPerWeek) {
+                        $issueType = 'Teacher Overloaded';
+                        $reasonMsg = "Teacher [{$tName}] is assigned {$teacherReqTotal} lectures across classes, which exceeds weekly limit ({$totalSlotsPerWeek} periods).";
+                        $suggestion = "Reduce Teacher [{$tName}] workload or assign a different teacher for this subject.";
+                    } else {
+                        $issueType = 'Teacher Schedule Clash';
+                        $reasonMsg = "Teacher [{$tName}] is busy teaching other classes during all available free period slots for [{$cName}].";
+                        $suggestion = "Assign a different teacher for this subject in [{$cName}] or adjust period timings.";
+                    }
+
                     $unassignedDetails[] = [
                         'class_id' => $classId,
+                        'class_name' => $cName,
                         'section_id' => $sectionId,
+                        'section_name' => $sName,
                         'subject_id' => $lecture['subject_id'],
-                        'teacher_user_id' => $lecture['teacher_user_id'],
-                        'reason' => "No free period slot available without teacher/class conflict, or class capacity ({$totalSlotsPerWeek} periods/week) was exceeded.",
+                        'subject_name' => $subName,
+                        'teacher_id' => $lecture['teacher_user_id'],
+                        'teacher_name' => $tName,
+                        'issue' => $issueType,
+                        'reason' => $reasonMsg,
+                        'suggestion' => $suggestion,
                     ];
                 }
             }
@@ -618,7 +668,7 @@ class TimetableGeneratorService
             'created_count' => count($allEntriesToInsert),
             'classes_scheduled' => $classesScheduledCount,
             'unassigned_count' => $unassignedLecturesCount,
-            'unassigned_details' => $unassignedDetails ?? [],
+            'unassigned_details' => $unassignedDetails,
             'days' => array_keys($daySlots),
             'total_weekly_periods' => $totalSlotsPerWeek,
         ];
