@@ -189,8 +189,21 @@ class TimetableController extends Controller
             return ResponseService::error('Validation failed', 422, ['session_id' => ['No active academic session exists for the active institute.']]);
         }
 
-        // 1. Process Step 1: Shifts & Timings (if provided)
-        if (! empty($validated['timing'])) {
+        // 1. Process Step 1: Shifts & Timings (DaysConfig or Timing array)
+        $activeDays = $validated['days'] ?? [];
+
+        if (! empty($validated['days_config'])) {
+            $duration = (int) ($validated['period_duration'] ?? 45);
+            $generator->setupShiftsFromDaysConfig($institute, $duration, $validated['days_config']);
+
+            // Auto-collect active days if not explicitly provided
+            if (empty($activeDays)) {
+                $activeDays = collect($validated['days_config'])
+                    ->filter(fn ($d) => (bool) ($d['active'] ?? true))
+                    ->pluck('name')
+                    ->all();
+            }
+        } elseif (! empty($validated['timing'])) {
             $timing = $validated['timing'];
             $generator->setupShifts(
                 $institute,
@@ -200,28 +213,37 @@ class TimetableController extends Controller
             );
         }
 
-        // 2. Process Step 2: Curriculum Weightages (if provided)
+        // 2. Process Step 2: Curriculum Weightages (from normalized_curriculum or curriculum)
         $workloadOverrides = [];
-        if (! empty($validated['curriculum'])) {
-            foreach ($validated['curriculum'] as $classCurriculum) {
-                $cId = $classCurriculum['class_id'];
-                foreach ($classCurriculum['weightages'] as $w) {
-                    $workloadOverrides[] = [
-                        'class_id' => $cId,
-                        'subject_id' => $w['subject_id'],
-                        'weekly_periods' => $w['weekly_periods'],
-                    ];
+        $curriculumClasses = [];
+
+        $curriculumData = $validated['normalized_curriculum'] ?? $validated['curriculum'] ?? [];
+        if (! empty($curriculumData) && is_array($curriculumData)) {
+            foreach ($curriculumData as $classCurriculum) {
+                if (is_array($classCurriculum) && isset($classCurriculum['class_id'], $classCurriculum['weightages'])) {
+                    $cId = (int) $classCurriculum['class_id'];
+                    $curriculumClasses[] = $cId;
+
+                    foreach ($classCurriculum['weightages'] as $w) {
+                        $workloadOverrides[] = [
+                            'class_id' => $cId,
+                            'subject_id' => (int) $w['subject_id'],
+                            'weekly_periods' => (int) $w['weekly_periods'],
+                        ];
+                    }
                 }
             }
         }
+
+        $classIdsToSchedule = $validated['class_ids'] ?? array_unique($curriculumClasses);
 
         // 3. Process Step 3: Run Clash-Free Generator
         try {
             $result = $generator->generate(
                 $institute,
                 $sessionId,
-                $validated['class_ids'] ?? [],
-                $validated['days'] ?? [],
+                $classIdsToSchedule,
+                $activeDays,
                 $validated['overwrite_existing'] ?? true,
                 $workloadOverrides
             );

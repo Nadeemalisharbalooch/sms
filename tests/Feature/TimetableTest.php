@@ -480,4 +480,108 @@ class TimetableTest extends TestCase
         $this->assertEquals(5, $sciCount, 'Science weekly periods count mismatch');
         $this->assertEquals(3, $islCount, 'Islamiat weekly periods count mismatch');
     }
+
+    public function test_wizard_generate_with_days_config_and_curriculum_map_payload(): void
+    {
+        [$user, $institute, $session] = $this->createInstituteContext();
+
+        $teacher1 = User::factory()->create();
+        $teacher2 = User::factory()->create();
+
+        foreach ([$teacher1, $teacher2] as $t) {
+            InstituteUser::create(['user_id' => $t->id, 'institute_id' => $institute->id, 'is_active' => true]);
+        }
+
+        $class1 = AcademicClass::create(['institute_id' => $institute->id, 'name' => 'Class 1', 'code' => 'C1']);
+        $sub3 = Subject::create(['institute_id' => $institute->id, 'name' => 'English', 'code' => 'ENG']);
+        $sub4 = Subject::create(['institute_id' => $institute->id, 'name' => 'Math', 'code' => 'MTH']);
+
+        SubjectAllocation::create(['session_id' => $session->id, 'class_id' => $class1->id, 'subject_id' => $sub3->id, 'teacher_user_id' => $teacher1->id]);
+        SubjectAllocation::create(['session_id' => $session->id, 'class_id' => $class1->id, 'subject_id' => $sub4->id, 'teacher_user_id' => $teacher2->id]);
+
+        Sanctum::actingAs($user);
+
+        $payload = [
+            'periodDuration' => 60,
+            'daysConfig' => [
+                [
+                    'name' => 'Monday',
+                    'active' => true,
+                    'startTime' => '09:00',
+                    'endTime' => '14:00',
+                    'hasBreak' => true,
+                    'breakStart' => '11:00',
+                    'breakEnd' => '12:00',
+                ],
+                [
+                    'name' => 'Tuesday',
+                    'active' => true,
+                    'startTime' => '09:00',
+                    'endTime' => '14:00',
+                    'hasBreak' => true,
+                    'breakStart' => '11:00',
+                    'breakEnd' => '12:00',
+                ],
+                [
+                    'name' => 'Wednesday',
+                    'active' => true,
+                    'startTime' => '09:00',
+                    'endTime' => '14:00',
+                    'hasBreak' => true,
+                    'breakStart' => '11:00',
+                    'breakEnd' => '12:00',
+                ],
+                [
+                    'name' => 'Thursday',
+                    'active' => true,
+                    'startTime' => '09:00',
+                    'endTime' => '14:00',
+                    'hasBreak' => true,
+                    'breakStart' => '11:00',
+                    'breakEnd' => '12:00',
+                ],
+                [
+                    'name' => 'Friday',
+                    'active' => true,
+                    'startTime' => '09:00',
+                    'endTime' => '12:00',
+                    'hasBreak' => false,
+                    'breakStart' => '11:00',
+                    'breakEnd' => '11:30',
+                ],
+                [
+                    'name' => 'Saturday',
+                    'active' => true,
+                    'startTime' => '09:00',
+                    'endTime' => '14:00',
+                    'hasBreak' => true,
+                    'breakStart' => '11:00',
+                    'breakEnd' => '12:00',
+                ],
+                [
+                    'name' => 'Sunday',
+                    'active' => false,
+                    'startTime' => '09:00',
+                    'endTime' => '14:00',
+                    'hasBreak' => true,
+                    'breakStart' => '11:00',
+                    'breakEnd' => '12:00',
+                ],
+            ],
+            'curriculum' => [
+                (string) $class1->id => [
+                    (string) $sub3->id => 3,
+                    (string) $sub4->id => 3,
+                ],
+            ],
+        ];
+
+        $response = $this->postJson('/api/institutes/timetable/wizard-generate', $payload);
+        $response->assertOk();
+        $response->assertJsonPath('data.success', true);
+        $this->assertEquals(6, $response->json('data.created_count'));
+
+        $this->assertEquals(3, TimetableEntry::where('session_id', $session->id)->where('subject_id', $sub3->id)->count());
+        $this->assertEquals(3, TimetableEntry::where('session_id', $session->id)->where('subject_id', $sub4->id)->count());
+    }
 }

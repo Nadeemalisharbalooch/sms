@@ -166,6 +166,109 @@ class TimetableGeneratorService
     }
 
     /**
+     * Generate and store Time Slots from full Days Configuration array.
+     *
+     * @return array<TimetableTimeSlot>
+     */
+    public function setupShiftsFromDaysConfig(
+        Institute $institute,
+        int $durationMinutes,
+        array $daysConfig
+    ): array {
+        $slotsToCreate = [];
+        $sortOrder = 1;
+
+        foreach ($daysConfig as $dayConfig) {
+            $isActive = (bool) ($dayConfig['active'] ?? $dayConfig['is_active'] ?? true);
+            if (! $isActive) {
+                continue;
+            }
+
+            $dayName = strtolower($dayConfig['name'] ?? $dayConfig['day'] ?? '');
+            if (! in_array($dayName, self::DEFAULT_DAYS, true) && $dayName !== 'sunday') {
+                continue;
+            }
+
+            $startTime = $dayConfig['start_time'] ?? $dayConfig['startTime'] ?? null;
+            $endTime = $dayConfig['end_time'] ?? $dayConfig['endTime'] ?? null;
+
+            if (empty($startTime) || empty($endTime)) {
+                continue;
+            }
+
+            $hasBreak = (bool) ($dayConfig['has_break'] ?? $dayConfig['hasBreak'] ?? false);
+            $breakStart = $hasBreak ? ($dayConfig['break_start'] ?? $dayConfig['breakStart'] ?? null) : null;
+            $breakEnd = $hasBreak ? ($dayConfig['break_end'] ?? $dayConfig['breakEnd'] ?? null) : null;
+            $breakName = $dayConfig['break_name'] ?? $dayConfig['breakName'] ?? 'Recess / Break';
+
+            $start = Carbon::createFromFormat('H:i', $startTime);
+            $end = Carbon::createFromFormat('H:i', $endTime);
+            $bStart = $breakStart ? Carbon::createFromFormat('H:i', $breakStart) : null;
+            $bEnd = $breakEnd ? Carbon::createFromFormat('H:i', $breakEnd) : null;
+
+            $current = $start->copy();
+            $periodIndex = 1;
+
+            while ($current->lt($end)) {
+                if ($hasBreak && $bStart !== null && $bEnd !== null && $current->equalTo($bStart)) {
+                    $slotsToCreate[] = [
+                        'institute_id' => $institute->id,
+                        'name' => ucfirst($dayName).' '.$breakName,
+                        'start_time' => $bStart->format('H:i'),
+                        'end_time' => $bEnd->format('H:i'),
+                        'is_break' => true,
+                        'days' => [$dayName],
+                        'sort_order' => $sortOrder++,
+                        'is_active' => true,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
+                    $current = $bEnd->copy();
+                    continue;
+                }
+
+                if ($hasBreak && $bStart !== null && $current->lt($bStart) && $current->copy()->addMinutes($durationMinutes)->gt($bStart)) {
+                    $next = $bStart->copy();
+                } else {
+                    $next = $current->copy()->addMinutes($durationMinutes);
+                    if ($next->gt($end)) {
+                        $next = $end->copy();
+                    }
+                }
+
+                if ($next->lte($current)) {
+                    break;
+                }
+
+                $slotsToCreate[] = [
+                    'institute_id' => $institute->id,
+                    'name' => ucfirst($dayName)." Period {$periodIndex}",
+                    'start_time' => $current->format('H:i'),
+                    'end_time' => $next->format('H:i'),
+                    'is_break' => false,
+                    'days' => [$dayName],
+                    'sort_order' => $sortOrder++,
+                    'is_active' => true,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ];
+
+                $periodIndex++;
+                $current = $next->copy();
+            }
+        }
+
+        DB::transaction(function () use ($institute, $slotsToCreate) {
+            TimetableTimeSlot::where('institute_id', $institute->id)->delete();
+            foreach ($slotsToCreate as $slot) {
+                TimetableTimeSlot::create($slot);
+            }
+        });
+
+        return TimetableTimeSlot::where('institute_id', $institute->id)->orderBy('sort_order')->get()->all();
+    }
+
+    /**
      * Generate clash-free timetable for active classes.
      */
     public function generate(
