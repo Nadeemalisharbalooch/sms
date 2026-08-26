@@ -251,7 +251,7 @@ class TimetableTest extends TestCase
         $this->assertEquals($slot2->id, $entry->time_slot_id);
     }
 
-    public function test_can_export_timetable_as_html_and_excel(): void
+    public function test_can_export_timetable_as_html_pdf_excel_and_json(): void
     {
         [$user, $institute, $session] = $this->createInstituteContext();
 
@@ -265,6 +265,12 @@ class TimetableTest extends TestCase
         $htmlResponse->assertOk();
         $this->assertStringContainsString('<!DOCTYPE html>', $htmlResponse->getContent());
         $this->assertStringContainsString('Grade 7', $htmlResponse->getContent());
+
+        // The class-specific endpoint defaults to a class timetable and returns a real PDF.
+        $pdfResponse = $this->get("/api/institutes/timetable/export/classes?class_id={$class->id}&format=pdf");
+        $pdfResponse->assertOk();
+        $pdfResponse->assertHeader('content-type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF-', $pdfResponse->getContent());
 
         // Export as Excel spreadsheet
         $excelResponse = $this->get("/api/institutes/timetable/export?type=class&class_id={$class->id}&format=excel");

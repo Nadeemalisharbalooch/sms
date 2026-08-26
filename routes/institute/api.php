@@ -237,6 +237,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('institutes/timetable/export', [TimetableController::class, 'export'])
         ->name('institutes.timetable.export');
+    // Backward-compatible class export URL used by the timetable screen.
+    Route::get('institutes/timetable/export/classes', [TimetableController::class, 'export'])
+        ->name('institutes.timetable.export.classes');
 
     Route::apiResource('institutes', InstituteController::class);
 });

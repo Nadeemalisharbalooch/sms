@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Institute;
 
+use Barryvdh\DomPDF\Facade\Pdf;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Institute\ExportTimetableRequest;
 use App\Http\Requests\Institute\GenerateTimetableRequest;
@@ -818,7 +819,7 @@ class TimetableController extends Controller
     }
 
     /**
-     * Export timetable as HTML view (ready for PDF print), Excel, or JSON.
+     * Export timetable as PDF, HTML, Excel, or JSON.
      */
     public function export(ExportTimetableRequest $request, TimetableExportService $exportService): Response
     {
@@ -920,6 +921,14 @@ class TimetableController extends Controller
         }
 
         $html = $exportService->renderHtml($institute, $session, $type, $class, $section, $teacher, $template);
+
+        if ($format === 'pdf') {
+            $filename = 'timetable-'.str($type)->slug().'-'.now()->format('Ymd-His').'.pdf';
+
+            return Pdf::loadHTML($html)
+                ->setPaper('a4', 'landscape')
+                ->stream($filename);
+        }
 
         return response($html, 200, ['Content-Type' => 'text/html']);
     }
