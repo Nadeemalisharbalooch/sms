@@ -267,7 +267,7 @@ class TimetableTest extends TestCase
         $this->assertStringContainsString('Grade 7', $htmlResponse->getContent());
 
         // The class-specific endpoint defaults to a class timetable and returns a real PDF.
-        $pdfResponse = $this->get("/api/institutes/timetable/export/classes?class_id={$class->id}&format=pdf");
+        $pdfResponse = $this->get("/institutes/timetable/export/classes?class_id={$class->id}&format=pdf");
         $pdfResponse->assertOk();
         $pdfResponse->assertHeader('content-type', 'application/pdf');
         $this->assertStringStartsWith('%PDF-', $pdfResponse->getContent());
