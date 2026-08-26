@@ -49,6 +49,7 @@ class DeleteVouchersRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'batch_id' => ['nullable', 'string', 'exists:fee_vouchers,batch_id'],
             'billing_month' => ['nullable', 'string', 'regex:/^\d{4}-\d{2}$/'],
             'class_id' => ['nullable', 'integer', 'exists:classes,id'],
             'student_id' => ['nullable'],
@@ -65,13 +66,14 @@ class DeleteVouchersRequest extends FormRequest
     public function withValidator($validator): void
     {
         $validator->after(function ($v) {
-            $hasFilter = $this->filled('billing_month')
+            $hasFilter = $this->filled('batch_id')
+                || $this->filled('billing_month')
                 || $this->filled('class_id')
                 || ! empty($this->input('student_ids'))
                 || ! empty($this->input('voucher_ids'));
 
             if (! $hasFilter) {
-                $v->errors()->add('filter', 'At least one filter criterion (billing_month, class_id, student_ids, or voucher_ids) must be provided.');
+                $v->errors()->add('filter', 'At least one filter criterion (batch_id, billing_month, class_id, student_ids, or voucher_ids) must be provided.');
             }
         });
     }

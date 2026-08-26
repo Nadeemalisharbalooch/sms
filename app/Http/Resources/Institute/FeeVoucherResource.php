@@ -11,6 +11,7 @@ class FeeVoucherResource extends JsonResource
     {
         return [
             'voucher_id' => $this->id,
+            'batch_id' => $this->batch_id,
             'billing_month' => $this->billing_month,
             'total_amount' => $this->total_amount,
             'paid_amount' => $this->paid_amount,

@@ -163,10 +163,14 @@ Route::middleware('auth:sanctum')->group(function () {
         ->name('institutes.fees.generate-vouchers.destroy');
     Route::delete('institutes/fees/generate-vouchers/{voucherId}', [FeeController::class, 'destroyVoucher'])
         ->name('institutes.fees.generate-vouchers.destroySingle');
+    Route::delete('institutes/fees/generate-vouchers/batch/{batchId}', [FeeController::class, 'destroyVouchersByBatch'])
+        ->name('institutes.fees.generate-vouchers.destroyBatch');
     Route::delete('institutes/fees/vouchers', [FeeController::class, 'destroyVouchers'])
         ->name('institutes.fees.vouchers.destroyBulk');
     Route::delete('institutes/fees/vouchers/{voucherId}', [FeeController::class, 'destroyVoucher'])
         ->name('institutes.fees.vouchers.destroy');
+    Route::delete('institutes/fees/vouchers/batch/{batchId}', [FeeController::class, 'destroyVouchersByBatch'])
+        ->name('institutes.fees.vouchers.destroyBatch');
 
     // API 5: Fetch Student Ledger (Cashier Search)
     Route::get('institutes/fees/ledger', [FeeController::class, 'ledger'])

@@ -12,6 +12,7 @@ class FeeVoucher extends Model
         'institute_id',
         'session_id',
         'student_id',
+        'batch_id',
         'billing_month',
         'due_date',
         'total_amount',
