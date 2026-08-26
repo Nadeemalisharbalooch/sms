@@ -8,6 +8,5 @@ Route::get('/', function () {
 });
 
 // Website URL for opening or downloading a class timetable PDF.
-Route::middleware('auth:sanctum')
-    ->get('institutes/timetable/export/classes', [TimetableController::class, 'export'])
+Route::get('institutes/timetable/export/classes', [TimetableController::class, 'export'])
     ->name('institutes.timetable.export.classes');

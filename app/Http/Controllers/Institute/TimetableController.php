@@ -823,24 +823,37 @@ class TimetableController extends Controller
      */
     public function export(ExportTimetableRequest $request, TimetableExportService $exportService): Response
     {
+        $validated = $request->validated();
+        $type = $validated['type'];
+        $class = isset($validated['class_id']) ? AcademicClass::find($validated['class_id']) : null;
         $institute = $this->activeInstitute($request);
+
+        // The public class-export route has no authenticated user. Its class_id
+        // determines the institute and it cannot be used for another export type.
+        if ($institute === null && $request->routeIs('institutes.timetable.export.classes') && $type === 'class') {
+            $institute = $class?->institute;
+        }
+
         if ($institute === null) {
             return ResponseService::error('No active institute is associated with this user', 422);
         }
 
-        $validated = $request->validated();
         $sessionId = $validated['session_id'] ?? $this->activeSessionId($institute->id);
-        $session = AcademicSession::find($sessionId);
+        $session = AcademicSession::whereKey($sessionId)
+            ->where('institute_id', $institute->id)
+            ->first();
 
         if ($session === null) {
             return ResponseService::error('Academic session not found', 422);
         }
 
-        $class = isset($validated['class_id']) ? AcademicClass::find($validated['class_id']) : null;
+        if ($class !== null && $class->institute_id !== $institute->id) {
+            return ResponseService::notFound('Class not found in this institute');
+        }
+
         $section = isset($validated['section_id']) ? AcademicSection::find($validated['section_id']) : null;
         $teacher = isset($validated['teacher_id']) ? User::find($validated['teacher_id']) : null;
 
-        $type = $validated['type'];
         $format = $validated['format'] ?? 'html';
         $template = $validated['template'] ?? 'classic_grid';
 
@@ -981,8 +994,13 @@ class TimetableController extends Controller
 
     private function activeInstitute(Request $request): ?Institute
     {
+        $user = $request->user();
+        if ($user === null) {
+            return null;
+        }
+
         $instituteId = InstituteUser::query()
-            ->where('user_id', $request->user()->id)
+            ->where('user_id', $user->id)
             ->where('is_active', true)
             ->value('institute_id');
 
