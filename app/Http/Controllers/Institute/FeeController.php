@@ -694,6 +694,23 @@ class FeeController extends Controller
             'partial_count' => $allMatching->where('status', 'partial')->count(),
         ];
 
+        $batchSummaries = $allMatching
+            ->groupBy(fn ($v) => $v->batch_id ?: '__unbatched__')
+            ->map(function ($vouchers, $batchId) {
+                return [
+                    'batch_id' => $batchId === '__unbatched__' ? null : $batchId,
+                    'total_vouchers' => $vouchers->count(),
+                    'total_amount' => round((float) $vouchers->sum('total_amount'), 2),
+                    'total_paid' => round((float) $vouchers->sum('paid_amount'), 2),
+                    'total_balance_due' => round((float) $vouchers->sum(fn ($v) => $v->total_amount - $v->paid_amount), 2),
+                    'paid_count' => $vouchers->where('status', 'paid')->count(),
+                    'unpaid_count' => $vouchers->where('status', 'unpaid')->count(),
+                    'partial_count' => $vouchers->where('status', 'partial')->count(),
+                ];
+            })
+            ->values()
+            ->all();
+
         $paginated = $query->paginate($perPage);
 
         // Transform collection for clean frontend consumption
@@ -749,7 +766,8 @@ class FeeController extends Controller
             ->pluck('batch_id');
 
         return ResponseService::success([
-            'summary' => $summary,
+            // 'summary' => $summary,
+            'batch_summaries' => $batchSummaries,
             // 'available_months' => $availableMonths,
             // 'batch_ids' => $batchIds,
             'vouchers' => $vouchers,
