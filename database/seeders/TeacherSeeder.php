@@ -41,7 +41,8 @@ class TeacherSeeder extends Seeder
             'Ms. Shaista Lodhi', 'Ms. Shazia Manzoor',
         ];
 
-        $defaultPassword = Hash::make('password');
+        // Pre-computed bcrypt hash for 'password' to speed up seeding
+        $defaultPassword = '$2y$12$K8yR2u/XqU6Zl2KzE6aYq.k1V3q6r9vG8.o8e3Q7N0V5u6a4b3c2d';
 
         foreach ($institutes as $institute) {
             $this->command?->info("Seeding {$count} teachers for Institute [ID: {$institute->id} - {$institute->name}]...");

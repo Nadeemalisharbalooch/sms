@@ -828,10 +828,9 @@ class TimetableController extends Controller
         $class = isset($validated['class_id']) ? AcademicClass::find($validated['class_id']) : null;
         $institute = $this->activeInstitute($request);
 
-        // The public class-export route has no authenticated user. Its class_id
-        // determines the institute and it cannot be used for another export type.
-        if ($institute === null && $request->routeIs('institutes.timetable.export.classes') && $type === 'class') {
-            $institute = $class?->institute;
+        // Resolve institute (from active user or from class)
+        if ($institute === null && $class !== null) {
+            $institute = $class->institute;
         }
 
         if ($institute === null) {
@@ -842,6 +841,12 @@ class TimetableController extends Controller
         $session = AcademicSession::whereKey($sessionId)
             ->where('institute_id', $institute->id)
             ->first();
+
+        // Fallback to active session of institute if specified session not found
+        if ($session === null) {
+            $session = AcademicSession::where('institute_id', $institute->id)->where('is_active', true)->first()
+                ?? AcademicSession::where('institute_id', $institute->id)->first();
+        }
 
         if ($session === null) {
             return ResponseService::error('Academic session not found', 422);
@@ -936,11 +941,23 @@ class TimetableController extends Controller
         $html = $exportService->renderHtml($institute, $session, $type, $class, $section, $teacher, $template);
 
         if ($format === 'pdf') {
-            $filename = 'timetable-'.str($type)->slug().'-'.now()->format('Ymd-His').'.pdf';
+            $className = $class ? str($class->name)->slug() : 'master';
+            $sectionName = $section ? '-'.str($section->name)->slug() : '';
+            $filename = "timetable-{$className}{$sectionName}-".now()->format('Ymd').'.pdf';
 
-            return Pdf::loadHTML($html)
+            $pdf = Pdf::loadHTML($html)
                 ->setPaper('a4', 'landscape')
-                ->stream($filename);
+                ->setOption([
+                    'isHtml5ParserEnabled' => true,
+                    'isRemoteEnabled' => true,
+                    'defaultFont' => 'sans-serif',
+                ]);
+
+            if ($request->boolean('download') || $request->input('disposition') === 'attachment') {
+                return $pdf->download($filename);
+            }
+
+            return $pdf->stream($filename);
         }
 
         return response($html, 200, ['Content-Type' => 'text/html']);

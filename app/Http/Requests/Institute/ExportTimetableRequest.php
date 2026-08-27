@@ -9,10 +9,13 @@ class ExportTimetableRequest extends FormRequest
 {
     protected function prepareForValidation(): void
     {
-        // The class-specific endpoint implies the export type, so clients only
-        // need to send class_id (plus the optional format/session/template).
-        if ($this->routeIs('institutes.timetable.export.classes') && ! $this->filled('type')) {
-            $this->merge(['type' => 'class']);
+        // Automatically default type to 'class' if class_id is present or route is export/classes
+        if (! $this->filled('type')) {
+            if ($this->routeIs('institutes.timetable.export.classes') || $this->filled('class_id')) {
+                $this->merge(['type' => 'class']);
+            } elseif ($this->filled('teacher_id')) {
+                $this->merge(['type' => 'teacher']);
+            }
         }
     }
 
@@ -31,6 +34,8 @@ class ExportTimetableRequest extends FormRequest
             'session_id' => ['nullable', 'integer', 'exists:academic_sessions,id'],
             'template' => ['nullable', 'string', Rule::in(['classic_grid', 'compact_card', 'teacher_schedule', 'master_matrix'])],
             'format' => ['nullable', 'string', Rule::in(['html', 'pdf', 'excel', 'json'])],
+            'download' => ['nullable', 'boolean'],
+            'disposition' => ['nullable', 'string', Rule::in(['inline', 'attachment'])],
         ];
     }
 }

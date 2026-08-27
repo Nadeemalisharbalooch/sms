@@ -664,4 +664,29 @@ class TimetableTest extends TestCase
         $viewSecB->assertOk();
         $viewSecB->assertJsonPath('data.section.name', 'Section B');
     }
+
+    public function test_export_class_with_multiple_sections_renders_one_page_per_section(): void
+    {
+        [$user, $institute, $session] = $this->createInstituteContext();
+
+        $class = AcademicClass::create(['institute_id' => $institute->id, 'name' => 'Class 4', 'code' => 'C4']);
+        $secA = AcademicSection::create(['class_id' => $class->id, 'name' => 'Section A', 'code' => '4A']);
+        $secB = AcademicSection::create(['class_id' => $class->id, 'name' => 'Section B', 'code' => '4B']);
+
+        $slot = TimetableTimeSlot::create(['institute_id' => $institute->id, 'name' => 'Period 1', 'start_time' => '08:00', 'end_time' => '08:45', 'sort_order' => 1]);
+
+        // HTML Export of Class 4: Should contain both Section A and Section B as separate page sections
+        $htmlResponse = $this->get("/institutes/timetable/export/classes?session_id={$session->id}&class_id={$class->id}&format=html");
+        $htmlResponse->assertOk();
+        $html = $htmlResponse->getContent();
+        $this->assertStringContainsString('Class: Class 4 - Section A', $html);
+        $this->assertStringContainsString('Class: Class 4 - Section B', $html);
+        $this->assertStringContainsString('page-break-after: always', $html);
+
+        // PDF Export of Class 4: Direct download/stream returns valid PDF
+        $pdfResponse = $this->get("/institutes/timetable/export/classes?session_id={$session->id}&class_id={$class->id}&format=pdf");
+        $pdfResponse->assertOk();
+        $pdfResponse->assertHeader('content-type', 'application/pdf');
+        $this->assertStringStartsWith('%PDF-', $pdfResponse->getContent());
+    }
 }

@@ -718,35 +718,35 @@ class FeeController extends Controller
             $enrollment = $voucher->student?->enrollments?->first();
 
             return [
-                // 'id' => $voucher->id,
+                'id' => $voucher->id,
                 'voucher_no' => $voucher->id,
-                'batch_id' => $voucher->batch_id, 
+                'batch_id' => $voucher->batch_id,
                 'billing_month' => $voucher->billing_month,
                 'due_date' => $voucher->due_date?->toDateString(),
                 'total_amount' => $voucher->total_amount,
                 'paid_amount' => $voucher->paid_amount,
                 'balance_due' => round($voucher->total_amount - $voucher->paid_amount, 2),
                 'status' => $voucher->status,
-                // 'student' => $voucher->student ? [
-                //     'id' => $voucher->student->id,
-                //     'name' => trim($voucher->student->first_name.' '.$voucher->student->last_name),
-                //     'roll_number' => $enrollment?->roll_number,
-                //     'class' => $enrollment?->academicClass ? [
-                //         'id' => $enrollment->academicClass->id,
-                //         'name' => $enrollment->academicClass->name,
-                //     ] : null,
-                //     'section' => $enrollment?->section ? [
-                //         'id' => $enrollment->section->id,
-                //         'name' => $enrollment->section->name,
-                //     ] : null,
-                // ] : null,
-            //     'items' => $voucher->items->map(fn ($item) => [
-            //         'id' => $item->id,
-            //         'fee_name' => $item->fee_name,
-            //         'amount' => $item->amount,
-            //     ]),
-            //     'created_at' => $voucher->created_at?->toISOString(),
-             ];
+                'student' => $voucher->student ? [
+                    'id' => $voucher->student->id,
+                    'name' => trim($voucher->student->first_name.' '.$voucher->student->last_name),
+                    'roll_number' => $enrollment?->roll_number,
+                    'class' => $enrollment?->academicClass ? [
+                        'id' => $enrollment->academicClass->id,
+                        'name' => $enrollment->academicClass->name,
+                    ] : null,
+                    'section' => $enrollment?->section ? [
+                        'id' => $enrollment->section->id,
+                        'name' => $enrollment->section->name,
+                    ] : null,
+                ] : null,
+                'items' => $voucher->items->map(fn ($item) => [
+                    'id' => $item->id,
+                    'fee_name' => $item->fee_name,
+                    'amount' => $item->amount,
+                ]),
+                'created_at' => $voucher->created_at?->toISOString(),
+            ];
         });
 
         // Available billing months for filter dropdown
@@ -766,10 +766,10 @@ class FeeController extends Controller
             ->pluck('batch_id');
 
         return ResponseService::success([
-            // 'summary' => $summary,
+            'summary' => $summary,
             'batch_summaries' => $batchSummaries,
-            // 'available_months' => $availableMonths,
-            // 'batch_ids' => $batchIds,
+            'available_months' => $availableMonths,
+            'batch_ids' => $batchIds,
             'vouchers' => $vouchers,
             'pagination' => [
                 'current_page' => $paginated->currentPage(),
