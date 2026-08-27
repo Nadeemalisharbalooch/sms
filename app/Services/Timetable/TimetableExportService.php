@@ -126,6 +126,48 @@ class TimetableExportService
     }
 
     /**
+     * Build unified period rows across all day-specific slots so that the grid
+     * has 1 compact row per period (e.g. Period 1, Period 2, Break, Period 3, Period 4)
+     * instead of duplicate diagonal rows.
+     */
+    private function buildUnifiedPeriodRows($slots): array
+    {
+        $distinctRows = [];
+
+        foreach ($slots as $slot) {
+            $cleanLabel = trim(preg_replace('/^(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+/i', '', $slot->name));
+            if (empty($cleanLabel)) {
+                $cleanLabel = $slot->name;
+            }
+
+            $startTime = substr($slot->start_time, 0, 5);
+            $endTime = substr($slot->end_time, 0, 5);
+            $isBreak = (bool) $slot->is_break;
+
+            // Signature based on start & end time + break status
+            $key = $startTime . '_' . $endTime . '_' . ($isBreak ? 'B' : 'P');
+
+            if (! isset($distinctRows[$key])) {
+                $distinctRows[$key] = [
+                    'key' => $key,
+                    'label' => $cleanLabel,
+                    'start_time' => $startTime,
+                    'end_time' => $endTime,
+                    'is_break' => $isBreak,
+                    'slot_ids' => [$slot->id],
+                ];
+            } else {
+                $distinctRows[$key]['slot_ids'][] = $slot->id;
+            }
+        }
+
+        // Sort rows chronologically by start_time
+        uasort($distinctRows, fn ($a, $b) => strcmp($a['start_time'], $b['start_time']));
+
+        return array_values($distinctRows);
+    }
+
+    /**
      * Render Multi-Page HTML Grid with 1 Page per Section / Class.
      */
     private function htmlMultiPageGrid(
@@ -137,6 +179,7 @@ class TimetableExportService
         string $type
     ): string {
         $days = self::DAYS;
+        $unifiedRows = $this->buildUnifiedPeriodRows($slots);
         $pagesHtml = '';
 
         foreach ($pages as $index => $pageInfo) {
@@ -146,7 +189,7 @@ class TimetableExportService
             $pTitle = $pageInfo['title'];
 
             // Filter entries for this specific page
-            $pageEntries = $allEntries->filter(function ($entry) use ($pClass, $pSection, $pTeacher, $type) {
+            $pageEntries = $allEntries->filter(function ($entry) use ($pClass, $pSection, $pTeacher) {
                 if ($pTeacher !== null) {
                     return $entry->teacher_user_id === $pTeacher->id;
                 }
@@ -158,6 +201,7 @@ class TimetableExportService
                     if ($pSection !== null) {
                         return $entry->section_id === $pSection->id;
                     }
+
                     return true;
                 }
 
@@ -170,23 +214,30 @@ class TimetableExportService
                 $grid[$entry->day_of_week][$entry->time_slot_id] = $entry;
             }
 
-            // Generate Table Rows
+            // Generate Table Rows based on unified period rows
             $rowsHtml = '';
-            foreach ($slots as $slot) {
-                $slotHeader = htmlspecialchars($slot->name) . '<br><span style="font-size:9.5px;color:#64748b;font-weight:normal;">' .
-                    substr($slot->start_time, 0, 5) . ' - ' . substr($slot->end_time, 0, 5) . '</span>';
+            foreach ($unifiedRows as $periodRow) {
+                $rowLabel = htmlspecialchars($periodRow['label']) . '<br><span style="font-size:9.5px;color:#64748b;font-weight:normal;">' .
+                    $periodRow['start_time'] . ' - ' . $periodRow['end_time'] . '</span>';
 
-                if ($slot->is_break) {
+                if ($periodRow['is_break']) {
                     $rowsHtml .= '<tr style="background-color:#fef3c7;font-weight:bold;text-align:center;">';
-                    $rowsHtml .= '<td style="background-color:#f8fafc;font-weight:bold;padding:6px;width:14%;">' . $slotHeader . '</td>';
-                    $rowsHtml .= '<td colspan="' . count($days) . '" style="color:#b45309;padding:8px;letter-spacing:1px;font-size:11px;">&#9208; ' . htmlspecialchars($slot->name) . ' (' . substr($slot->start_time, 0, 5) . ' - ' . substr($slot->end_time, 0, 5) . ')</td>';
+                    $rowsHtml .= '<td style="background-color:#f8fafc;font-weight:bold;padding:6px;width:14%;">' . $rowLabel . '</td>';
+                    $rowsHtml .= '<td colspan="' . count($days) . '" style="color:#b45309;padding:8px;letter-spacing:1px;font-size:11px;">&#9208; ' . htmlspecialchars($periodRow['label']) . ' (' . $periodRow['start_time'] . ' - ' . $periodRow['end_time'] . ')</td>';
                     $rowsHtml .= '</tr>';
                 } else {
                     $rowsHtml .= '<tr>';
-                    $rowsHtml .= '<td style="font-weight:bold;background-color:#f8fafc;padding:6px;width:14%;">' . $slotHeader . '</td>';
+                    $rowsHtml .= '<td style="font-weight:bold;background-color:#f8fafc;padding:6px;width:14%;">' . $rowLabel . '</td>';
 
                     foreach ($days as $day) {
-                        $entry = $grid[$day][$slot->id] ?? null;
+                        // Find entry for this day in any of the slots assigned to this period band
+                        $entry = null;
+                        foreach ($periodRow['slot_ids'] as $sId) {
+                            if (isset($grid[$day][$sId])) {
+                                $entry = $grid[$day][$sId];
+                                break;
+                            }
+                        }
 
                         if ($entry !== null) {
                             $subjectName = htmlspecialchars($entry->subject?->name ?? 'Subject');
@@ -199,7 +250,16 @@ class TimetableExportService
                                 $subMeta .
                                 '</td>';
                         } else {
-                            $rowsHtml .= '<td style="padding:6px 4px;text-align:center;color:#cbd5e1;font-size:11px;">-</td>';
+                            // Check if this day has a period slot configured at this time
+                            $hasSlotForDay = $slots->contains(function ($s) use ($day, $periodRow) {
+                                return (empty($s->days) || in_array($day, $s->days, true)) && in_array($s->id, $periodRow['slot_ids'], true);
+                            });
+
+                            if ($hasSlotForDay) {
+                                $rowsHtml .= '<td style="padding:6px 4px;text-align:center;color:#cbd5e1;font-size:11px;">-</td>';
+                            } else {
+                                $rowsHtml .= '<td style="padding:6px 4px;text-align:center;color:#e2e8f0;background-color:#f8fafc;font-size:10px;">—</td>';
+                            }
                         }
                     }
                     $rowsHtml .= '</tr>';
@@ -224,7 +284,7 @@ class TimetableExportService
                         <div class="schedule-title">{$pTitle} &bull; Session: {$session->name}</div>
                     </td>
                     <td style="border:none;padding:0;text-align:right;vertical-align:top;">
-                        <div class="meta-badge">Page: {$institute->name}</div>
+                        <div class="meta-badge">{$institute->name}</div>
                         <div class="meta-date">Generated: {$session->updated_at?->format('Y-m-d')}</div>
                     </td>
                 </tr>
@@ -368,6 +428,8 @@ HTML;
             ->orderBy('sort_order')
             ->get();
 
+        $unifiedRows = $this->buildUnifiedPeriodRows($slots);
+
         $pages = [];
 
         if ($type === 'class' && $class !== null) {
@@ -454,19 +516,26 @@ HTML;
             $sheet->getStyle('A3:G3')->getFont()->getColor()->setRGB('FFFFFF');
 
             $rowIndex = 4;
-            foreach ($slots as $slot) {
-                $sheet->setCellValue('A' . $rowIndex, $slot->name . "\n(" . substr($slot->start_time, 0, 5) . ' - ' . substr($slot->end_time, 0, 5) . ')');
+            foreach ($unifiedRows as $periodRow) {
+                $sheet->setCellValue('A' . $rowIndex, $periodRow['label'] . "\n(" . $periodRow['start_time'] . ' - ' . $periodRow['end_time'] . ')');
 
-                if ($slot->is_break) {
+                if ($periodRow['is_break']) {
                     $sheet->mergeCells('B' . $rowIndex . ':G' . $rowIndex);
-                    $sheet->setCellValue('B' . $rowIndex, '--- ' . $slot->name . ' ---');
+                    $sheet->setCellValue('B' . $rowIndex, '--- ' . $periodRow['label'] . ' ---');
                     $sheet->getStyle('A' . $rowIndex . ':G' . $rowIndex)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('FEF3C7');
                     $sheet->getStyle('B' . $rowIndex)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
                 } else {
                     $cIndex = 2;
                     foreach (self::DAYS as $day) {
                         $cLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($cIndex);
-                        $entry = $grid[$day][$slot->id] ?? null;
+
+                        $entry = null;
+                        foreach ($periodRow['slot_ids'] as $sId) {
+                            if (isset($grid[$day][$sId])) {
+                                $entry = $grid[$day][$sId];
+                                break;
+                            }
+                        }
 
                         if ($entry !== null) {
                             $cellText = ($pTeacher !== null)
