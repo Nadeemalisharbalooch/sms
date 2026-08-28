@@ -29,6 +29,7 @@ use App\Services\ResponseService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class FeeController extends Controller
 {
@@ -439,7 +440,9 @@ class FeeController extends Controller
                     ->lockForUpdate()
                     ->firstOrFail();
 
-                $batchId = 'batch_'.time().'_'.uniqid();
+                // The batch_id column is a UUID, so use a database-compatible
+                // identifier instead of a prefixed string.
+                $batchId = (string) Str::uuid();
 
                 $students = Student::query()
                     ->where('institute_id', $instituteId)
@@ -694,12 +697,25 @@ class FeeController extends Controller
             'partial_count' => $allMatching->where('status', 'partial')->count(),
         ];
 
-        $batchSummaries = $allMatching
+        // Batches represent generation runs. Keep this list institute-wide so
+        // the frontend can show every distinct batch for the active institute,
+        // including batches created in a different academic session or month.
+        $allInstituteBatchVouchers = FeeVoucher::query()
+            ->where('institute_id', $instituteId)
+            ->whereNotNull('batch_id')
+            ->get();
+
+        $batchSummaries = $allInstituteBatchVouchers
             ->groupBy(fn ($v) => $v->batch_id ?: '__unbatched__')
             ->map(function ($vouchers, $batchId) {
+                $latestVoucher = $vouchers->sortByDesc('created_at')->first();
+
                 return [
                     'batch_id' => $batchId === '__unbatched__' ? null : $batchId,
                     'total_vouchers' => $vouchers->count(),
+                    'session_id' => $latestVoucher?->session_id,
+                    'billing_month' => $latestVoucher?->billing_month,
+                    'generated_at' => $latestVoucher?->created_at?->format('Y-m-d H:i:s'),
                     'total_amount' => round((float) $vouchers->sum('total_amount'), 2),
                     'total_paid' => round((float) $vouchers->sum('paid_amount'), 2),
                     'total_balance_due' => round((float) $vouchers->sum(fn ($v) => $v->total_amount - $v->paid_amount), 2),
@@ -708,6 +724,7 @@ class FeeController extends Controller
                     'partial_count' => $vouchers->where('status', 'partial')->count(),
                 ];
             })
+            ->sortByDesc('generated_at')
             ->values()
             ->all();
 
@@ -768,9 +785,9 @@ class FeeController extends Controller
         return ResponseService::success([
             'summary' => $summary,
             'batch_summaries' => $batchSummaries,
-            'available_months' => $availableMonths,
-            'batch_ids' => $batchIds,
-            'vouchers' => $vouchers,
+            // 'available_months' => $availableMonths,
+            // 'batch_ids' => $batchIds,
+            // 'vouchers' => $vouchers,
             'pagination' => [
                 'current_page' => $paginated->currentPage(),
                 'last_page' => $paginated->lastPage(),
