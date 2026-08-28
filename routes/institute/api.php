@@ -77,6 +77,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('institutes/attendance', [AttendanceController::class, 'store'])
         ->name('institutes.attendance.store');
 
+    // Student Excel Import & Bulk Operations
+    Route::get('institutes/students/import-template', [StudentController::class, 'importTemplate'])
+        ->name('institutes.students.import-template');
+    Route::post('institutes/students/import', [StudentController::class, 'import'])
+        ->name('institutes.students.import');
+    Route::post('institutes/students/bulk-import', [StudentController::class, 'import'])
+        ->name('institutes.students.bulk-import');
+    Route::post('institutes/students/import-excel', [StudentController::class, 'import'])
+        ->name('institutes.students.import-excel');
+
     Route::patch('institutes/students/{student}/enrollment', [StudentController::class, 'updateEnrollment'])
         ->name('institutes.students.enrollment.update');
     Route::post('institutes/students/{student}/promote', [StudentController::class, 'promote'])

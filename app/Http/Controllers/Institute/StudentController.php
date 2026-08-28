@@ -16,13 +16,14 @@ use App\Models\Enrollment;
 use App\Models\InstituteUser;
 use App\Models\Student;
 use App\Services\ResponseService;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use PhpOffice\PhpSpreadsheet\IOFactory;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -121,7 +122,8 @@ class StudentController extends Controller
     }
 
     /**
-     * Import student profiles and active-session enrollments from an Excel file.
+     * Import student profiles and active-session enrollments from an Excel or CSV file.
+     * Supports passing class_id and section_id via request payload.
      */
     public function import(Request $request): JsonResponse
     {
@@ -131,7 +133,7 @@ class StudentController extends Controller
             return ResponseService::error('No active institute is associated with this user', 422);
         }
 
-        $sessionId = $this->activeSessionId($instituteId);
+        $sessionId = $request->integer('session_id') ?: $this->activeSessionId($instituteId);
 
         if ($sessionId === null) {
             return ResponseService::error('Validation failed', 422, [
@@ -140,141 +142,240 @@ class StudentController extends Controller
         }
 
         $request->validate([
-            'file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240'],
+            'file' => ['required', 'file', 'mimes:xlsx,xls,csv,txt', 'max:20480'],
+            'class_id' => ['nullable', 'integer'],
+            'section_id' => ['nullable', 'integer'],
         ]);
 
+        $defaultClassId = $request->integer('class_id') ?: null;
+        $defaultSectionId = $request->integer('section_id') ?: null;
+
+        // Verify class if provided in payload
+        $targetClass = null;
+        if ($defaultClassId !== null) {
+            $targetClass = AcademicClass::query()
+                ->whereKey($defaultClassId)
+                ->where('institute_id', $instituteId)
+                ->first();
+
+            if ($targetClass === null) {
+                return ResponseService::error('Validation failed', 422, [
+                    'class_id' => ['The selected class does not belong to the active institute.'],
+                ]);
+            }
+        }
+
+        // Verify section if provided in payload
+        $targetSection = null;
+        if ($defaultSectionId !== null) {
+            $targetSection = AcademicSection::query()
+                ->whereKey($defaultSectionId)
+                ->when($defaultClassId !== null, fn ($q) => $q->where('class_id', $defaultClassId))
+                ->first();
+
+            if ($targetSection === null) {
+                return ResponseService::error('Validation failed', 422, [
+                    'section_id' => ['The selected section does not belong to the selected class.'],
+                ]);
+            }
+        }
+
+        $uploadedFile = $request->file('file');
+
         try {
-            $worksheet = IOFactory::load($request->file('file')->getRealPath())->getActiveSheet();
-            $headerRow = $worksheet->rangeToArray('A1:K1', null, true, false, false)[0];
-            $headers = array_map(fn ($header) => $this->normalizeImportHeader($header), $headerRow);
-        } catch (\Throwable) {
+            $spreadsheet = IOFactory::load($uploadedFile->getRealPath());
+            $worksheet = $spreadsheet->getActiveSheet();
+            $highestRow = $worksheet->getHighestDataRow();
+            $highestColumn = $worksheet->getHighestDataColumn();
+        } catch (\Throwable $e) {
             return ResponseService::error('Validation failed', 422, [
-                'file' => ['The uploaded file could not be read as an Excel or CSV file.'],
+                'file' => ['The uploaded file could not be read as an Excel or CSV file. ' . $e->getMessage()],
             ]);
         }
 
-        if ($headers !== self::IMPORT_HEADERS) {
+        if ($highestRow < 2) {
             return ResponseService::error('Validation failed', 422, [
-                'file' => ['The header row must be: '.implode(', ', self::IMPORT_HEADERS).'.'],
+                'file' => ['The import file must contain at least one student data row below the header.'],
             ]);
         }
 
-        $lastRow = $worksheet->getHighestDataRow();
-        $rawRows = $lastRow < 2
-            ? []
-            : $worksheet->rangeToArray("A2:K{$lastRow}", null, true, false, false);
+        // Read header row
+        $headerValues = $worksheet->rangeToArray("A1:{$highestColumn}1", null, true, false, false)[0] ?? [];
+        $columnMap = [];
 
-        if ($rawRows === []) {
+        foreach ($headerValues as $colIdx => $colHeader) {
+            $normalizedField = $this->mapHeaderToField((string) $colHeader);
+            if ($normalizedField !== null && ! isset($columnMap[$normalizedField])) {
+                $columnMap[$normalizedField] = $colIdx;
+            }
+        }
+
+        // Check if we at least found a name or first_name column
+        if (! isset($columnMap['name']) && ! isset($columnMap['first_name'])) {
             return ResponseService::error('Validation failed', 422, [
-                'file' => ['The import file must contain at least one student row.'],
+                'file' => ['Could not find a student Name or First Name column in the header row. Available headers: ' . implode(', ', array_filter(array_map('trim', $headerValues)))],
             ]);
         }
 
-        $classIds = AcademicClass::query()
+        $instituteClasses = AcademicClass::query()
             ->where('institute_id', $instituteId)
-            ->pluck('id')
-            ->flip();
-        $sectionClassIds = AcademicSection::query()->pluck('class_id', 'id');
+            ->pluck('id', 'id');
+
+        $sectionClassIds = AcademicSection::query()
+            ->pluck('class_id', 'id');
+
         $rowsToCreate = [];
         $rowErrors = [];
         $seenProfiles = [];
 
-        foreach ($rawRows as $index => $row) {
-            $rowNumber = $index + 2;
+        for ($rowNum = 2; $rowNum <= $highestRow; $rowNum++) {
+            $rowCells = $worksheet->rangeToArray("A{$rowNum}:{$highestColumn}{$rowNum}", null, true, false, false)[0] ?? [];
 
-            if (collect($row)->every(fn ($value) => trim((string) $value) === '')) {
+            // Skip completely blank rows
+            if (collect($rowCells)->every(fn ($v) => $v === null || trim((string) $v) === '')) {
                 continue;
             }
 
-            $student = array_combine(self::IMPORT_HEADERS, $row);
-            $student = array_map(fn ($value) => is_string($value) ? trim($value) : $value, $student);
-            $student['dob'] = $this->normalizeImportDate($student['dob']);
-            $student['admission_date'] = $this->normalizeImportDate($student['admission_date']);
-            $student['address'] = $student['address'] === '' ? null : $student['address'];
-            $student['admission_date'] = $student['admission_date'] === '' ? null : $student['admission_date'];
-            $student['section_id'] = $student['section_id'] === '' ? null : $student['section_id'];
-            $student['roll_number'] = $student['roll_number'] === '' ? null : $student['roll_number'];
+            $rawRow = [];
+            foreach ($columnMap as $field => $colIdx) {
+                $rawRow[$field] = isset($rowCells[$colIdx]) ? trim((string) $rowCells[$colIdx]) : null;
+            }
 
-            $validator = Validator::make($student, [
-                'first_name' => ['required', 'string', 'max:100'],
-                'last_name' => ['required', 'string', 'max:100'],
-                'dob' => ['required', 'date', 'before:today'],
-                'gender' => ['required', 'in:male,female,other'],
-                'guardian_name' => ['required', 'string', 'max:150'],
-                'guardian_phone' => ['required', 'string', 'max:30'],
-                'address' => ['nullable', 'string'],
-                'admission_date' => ['nullable', 'date'],
-                'class_id' => ['required', 'integer'],
-                'section_id' => ['nullable', 'integer'],
-                'roll_number' => ['nullable', 'string', 'max:100'],
-            ]);
+            // Extract Name (split full_name into first_name and last_name if needed)
+            $firstName = $rawRow['first_name'] ?? null;
+            $lastName = $rawRow['last_name'] ?? null;
 
-            if ($validator->fails()) {
-                $rowErrors[$rowNumber] = $validator->errors()->all();
+            if (empty($firstName) && ! empty($rawRow['name'])) {
+                [$firstName, $lastName] = $this->splitFullName($rawRow['name']);
+            }
 
+            if (empty($firstName)) {
+                $rowErrors[$rowNum][] = 'Student name or first_name is required.';
                 continue;
             }
 
-            if (! $classIds->has($student['class_id'])) {
-                $rowErrors[$rowNumber][] = 'The class_id does not belong to the active institute.';
+            $lastName = $lastName ?: '-';
+
+            // Guardian / Father Name
+            $guardianName = $rawRow['guardian_name'] ?? $rawRow['father_name'] ?? null;
+            if (empty($guardianName)) {
+                $guardianName = 'Guardian of ' . $firstName;
             }
 
-            if ($student['section_id'] !== null
-                && (! $sectionClassIds->has($student['section_id'])
-                    || (int) $sectionClassIds->get($student['section_id']) !== (int) $student['class_id'])) {
-                $rowErrors[$rowNumber][] = 'The section_id does not belong to the selected class.';
-            }
+            // Phone
+            $guardianPhone = $rawRow['guardian_phone'] ?? $rawRow['phone'] ?? '03000000000';
 
-            $profileKey = strtolower($student['first_name'].'|'.$student['dob'].'|'.$student['guardian_name'].'|'.($student['roll_number'] ?? ''));
-            $alreadyExists = Student::query()
-                ->where('institute_id', $instituteId)
-                ->where('first_name', $student['first_name'])
-                ->whereDate('dob', $student['dob'])
-                ->where('guardian_name', $student['guardian_name'])
-                ->whereHas('enrollments', function ($query) use ($student) {
-                    $student['roll_number'] === null
-                        ? $query->whereNull('roll_number')
-                        : $query->where('roll_number', $student['roll_number']);
-                })
-                ->exists();
+            // Gender
+            $gender = $this->normalizeGender($rawRow['gender'] ?? null);
 
-            if ($alreadyExists || isset($seenProfiles[$profileKey])) {
-                $rowErrors[$rowNumber][] = 'A student with the same first name, date of birth, guardian name, and roll number already exists.';
-            }
+            // Dates
+            $dob = $this->normalizeImportDate($rawRow['dob'] ?? null) ?: now()->subYears(12)->format('Y-m-d');
+            $admissionDate = $this->normalizeImportDate($rawRow['admission_date'] ?? null) ?: now()->format('Y-m-d');
 
-            if (isset($rowErrors[$rowNumber])) {
+            // Class & Section ID
+            $rowClassId = ! empty($rawRow['class_id']) && is_numeric($rawRow['class_id'])
+                ? (int) $rawRow['class_id']
+                : $defaultClassId;
+
+            $rowSectionId = ! empty($rawRow['section_id']) && is_numeric($rawRow['section_id'])
+                ? (int) $rawRow['section_id']
+                : $defaultSectionId;
+
+            if ($rowClassId === null) {
+                $rowErrors[$rowNum][] = 'class_id is required either in the upload parameters or inside the Excel sheet.';
                 continue;
             }
 
+            if (! $instituteClasses->has($rowClassId)) {
+                $rowErrors[$rowNum][] = "class_id [{$rowClassId}] does not belong to the active institute.";
+                continue;
+            }
+
+            if ($rowSectionId !== null && (! $sectionClassIds->has($rowSectionId) || (int) $sectionClassIds->get($rowSectionId) !== $rowClassId)) {
+                $rowErrors[$rowNum][] = "section_id [{$rowSectionId}] does not belong to class [{$rowClassId}].";
+                continue;
+            }
+
+            $rollNumber = ! empty($rawRow['roll_number']) ? (string) $rawRow['roll_number'] : null;
+            $address = ! empty($rawRow['address']) ? (string) $rawRow['address'] : null;
+
+            // Check duplicate in seen batch
+            $profileKey = strtolower($firstName . '|' . $dob . '|' . $guardianName . '|' . ($rollNumber ?? ''));
+            if (isset($seenProfiles[$profileKey])) {
+                $rowErrors[$rowNum][] = 'Duplicate student profile found within the same spreadsheet.';
+                continue;
+            }
             $seenProfiles[$profileKey] = true;
-            $rowsToCreate[] = $student;
+
+            $rowsToCreate[] = [
+                'row_number' => $rowNum,
+                'first_name' => $firstName,
+                'last_name' => $lastName,
+                'guardian_name' => $guardianName,
+                'guardian_phone' => $guardianPhone,
+                'gender' => $gender,
+                'dob' => $dob,
+                'admission_date' => $admissionDate,
+                'address' => $address,
+                'class_id' => $rowClassId,
+                'section_id' => $rowSectionId,
+                'roll_number' => $rollNumber,
+            ];
         }
 
-        if ($rowErrors !== []) {
+        if (! empty($rowErrors)) {
             return ResponseService::error('Import validation failed', 422, ['rows' => $rowErrors]);
         }
 
-        DB::transaction(function () use ($rowsToCreate, $instituteId, $sessionId) {
-            foreach ($rowsToCreate as $student) {
-                $newStudent = Student::create([
-                    ...collect($student)->except(['class_id', 'section_id', 'roll_number'])->all(),
+        if (empty($rowsToCreate)) {
+            return ResponseService::error('Validation failed', 422, [
+                'file' => ['No valid student rows found to import.'],
+            ]);
+        }
+
+        $createdStudents = DB::transaction(function () use ($rowsToCreate, $instituteId, $sessionId) {
+            $created = [];
+            foreach ($rowsToCreate as $item) {
+                $student = Student::create([
                     'institute_id' => $instituteId,
-                    'admission_date' => $student['admission_date'] ?? now()->toDateString(),
+                    'first_name' => $item['first_name'],
+                    'last_name' => $item['last_name'],
+                    'dob' => $item['dob'],
+                    'gender' => $item['gender'],
+                    'guardian_name' => $item['guardian_name'],
+                    'guardian_phone' => $item['guardian_phone'],
+                    'address' => $item['address'],
+                    'admission_date' => $item['admission_date'],
                 ]);
 
-                $newStudent->enrollments()->create([
+                $enrollment = $student->enrollments()->create([
                     'session_id' => $sessionId,
-                    'class_id' => $student['class_id'],
-                    'section_id' => $student['section_id'],
-                    'roll_number' => $student['roll_number'],
+                    'class_id' => $item['class_id'],
+                    'section_id' => $item['section_id'],
+                    'roll_number' => $item['roll_number'],
                 ]);
+
+                $created[] = [
+                    'id' => $student->id,
+                    'name' => trim($student->first_name . ' ' . $student->last_name),
+                    'guardian_name' => $student->guardian_name,
+                    'roll_number' => $enrollment->roll_number,
+                    'class_id' => $enrollment->class_id,
+                    'section_id' => $enrollment->section_id,
+                ];
             }
+
+            return $created;
         });
 
         return ResponseService::success([
-            'imported_count' => count($rowsToCreate),
-            'failed_count' => 0,
-        ], 'Students imported successfully', 201);
+            'session_id' => $sessionId,
+            'class' => $targetClass ? ['id' => $targetClass->id, 'name' => $targetClass->name] : null,
+            'section' => $targetSection ? ['id' => $targetSection->id, 'name' => $targetSection->name] : null,
+            'total_rows' => count($rowsToCreate),
+            'imported_count' => count($createdStudents),
+            'students' => $createdStudents,
+        ], 'Students imported and enrolled successfully', 201);
     }
 
     /** Download a ready-to-fill Excel import template. */
@@ -284,22 +385,60 @@ class StudentController extends Controller
             return ResponseService::error('No active institute is associated with this user', 422);
         }
 
+        $classId = $request->integer('class_id') ?: null;
+        $sectionId = $request->integer('section_id') ?: null;
+
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
-        $sheet->fromArray(self::IMPORT_HEADERS, null, 'A1');
-        $sheet->fromArray([
-            ['Ahmed', 'Khan', '2015-04-15', 'male', 'Muhammad Khan', '03001234567', 'Street 1', '2026-08-01', 1, null, '10-A-01'],
-        ], null, 'A2');
-        $sheet->getStyle('A1:K1')->getFont()->setBold(true);
+        $sheet->setTitle('Student Import');
+
+        $headers = [
+            'Student Name',
+            'Father / Guardian Name',
+            'Roll Number',
+            'Gender',
+            'Date of Birth',
+            'Guardian Phone',
+            'Address',
+            'Admission Date',
+        ];
+
+        if ($classId === null) {
+            $headers[] = 'Class ID';
+            $headers[] = 'Section ID';
+        }
+
+        $sheet->fromArray($headers, null, 'A1');
+
+        $sampleRow = [
+            'Muhammad Ali',
+            'Tariq Khan',
+            '101',
+            'male',
+            '2012-05-15',
+            '03001234567',
+            'House 123, Street 4, City',
+            now()->format('Y-m-d'),
+        ];
+
+        if ($classId === null) {
+            $sampleRow[] = 1;
+            $sampleRow[] = 1;
+        }
+
+        $sheet->fromArray([$sampleRow], null, 'A2');
+        $sheet->getStyle('A1:J1')->getFont()->setBold(true);
         $sheet->freezePane('A2');
 
-        foreach (range('A', 'K') as $column) {
+        foreach (range('A', 'J') as $column) {
             $sheet->getColumnDimension($column)->setAutoSize(true);
         }
 
+        $filename = 'student-import-template' . ($classId ? "-class-{$classId}" : '') . '.xlsx';
+
         return response()->streamDownload(function () use ($spreadsheet) {
             (new Xlsx($spreadsheet))->save('php://output');
-        }, 'student-import-template.xlsx', [
+        }, $filename, [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ]);
     }
@@ -660,5 +799,91 @@ class StudentController extends Controller
     private function belongsToActiveInstitute(Request $request, Student $student): bool
     {
         return $student->institute_id === $this->activeInstituteId($request);
+    }
+
+    /**
+     * Map fuzzy or localized Excel column header to a standard field name.
+     */
+    private function mapHeaderToField(string $header): ?string
+    {
+        $clean = strtolower(trim(preg_replace('/[^a-zA-Z0-9]/', '', $header)));
+
+        $aliases = [
+            'name' => ['name', 'fullname', 'studentname', 'student', 'nameofstudent'],
+            'first_name' => ['firstname', 'fname', 'first'],
+            'last_name' => ['lastname', 'lname', 'surname', 'last'],
+            'guardian_name' => ['guardianname', 'fathername', 'father', 'guardian', 'parentname', 'parent', 'guardianfathername', 'fathersname'],
+            'guardian_phone' => ['guardianphone', 'phone', 'phonenumber', 'mobile', 'mobilenumber', 'contact', 'contactno', 'guardiancontact', 'fatherphone', 'cell', 'whatsapp', 'emergencycontact'],
+            'roll_number' => ['rollnumber', 'rollno', 'roll', 'regno', 'registrationno', 'admissionno', 'grno', 'grnumber', 'studentid', 'rollnum'],
+            'gender' => ['gender', 'sex'],
+            'dob' => ['dob', 'dateofbirth', 'birthdate', 'd_o_b', 'birth'],
+            'address' => ['address', 'city', 'residentialaddress', 'location', 'residence'],
+            'admission_date' => ['admissiondate', 'dateofadmission', 'doa', 'joiningdate', 'admission'],
+            'class_id' => ['classid', 'class'],
+            'section_id' => ['sectionid', 'section'],
+        ];
+
+        foreach ($aliases as $field => $fieldAliases) {
+            if (in_array($clean, $fieldAliases, true)) {
+                return $field;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Split a full name string into [first_name, last_name].
+     */
+    private function splitFullName(string $fullName): array
+    {
+        $parts = preg_split('/\s+/', trim($fullName));
+        if (count($parts) <= 1) {
+            return [$parts[0] ?? 'Student', '-'];
+        }
+
+        $lastName = array_pop($parts);
+        $firstName = implode(' ', $parts);
+
+        return [$firstName, $lastName];
+    }
+
+    /**
+     * Normalize gender string to 'male', 'female', or 'other'.
+     */
+    private function normalizeGender(?string $gender): string
+    {
+        $clean = strtolower(trim((string) $gender));
+        if (in_array($clean, ['f', 'female', 'girl', 'woman'], true)) {
+            return 'female';
+        }
+        if (in_array($clean, ['o', 'other'], true)) {
+            return 'other';
+        }
+
+        return 'male';
+    }
+
+    /**
+     * Normalize date value from Excel (numeric serial or string) to Y-m-d.
+     */
+    private function normalizeImportDate($value): ?string
+    {
+        if (empty($value)) {
+            return null;
+        }
+
+        if (is_numeric($value)) {
+            try {
+                return ExcelDate::excelToDateTimeObject((float) $value)->format('Y-m-d');
+            } catch (\Throwable) {
+            }
+        }
+
+        try {
+            return Carbon::parse((string) $value)->format('Y-m-d');
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }
