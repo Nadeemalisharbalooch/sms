@@ -5,6 +5,7 @@ use App\Http\Controllers\Institute\AcademicSectionController;
 use App\Http\Controllers\Institute\AcademicSessionController;
 use App\Http\Controllers\Institute\AttendanceController;
 use App\Http\Controllers\Institute\ClassSubjectController;
+use App\Http\Controllers\Institute\DashboardController;
 use App\Http\Controllers\Institute\FeeController;
 use App\Http\Controllers\Institute\InstituteController;
 use App\Http\Controllers\Institute\PermissionController;
@@ -247,6 +248,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('institutes/timetable/export', [TimetableController::class, 'export'])
         ->name('institutes.timetable.export');
+
+    // Dashboard
+    Route::get('institutes/dashboard/summary', [DashboardController::class, 'summary'])
+        ->name('institutes.dashboard.summary');
 
     Route::apiResource('institutes', InstituteController::class);
 });
