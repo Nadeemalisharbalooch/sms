@@ -254,10 +254,10 @@ class DashboardController extends Controller
      */
     private function buildRevenueChart(int $instituteId): array
     {
-        $now = Carbon::now();
+        $now = Carbon::now()->startOfMonth();
         $months = [];
         for ($i = 5; $i >= 0; $i--) {
-            $month = $now->copy()->subMonths($i);
+            $month = $now->copy()->subMonthsNoOverflow($i);
             $months[] = [
                 'month' => $month->format('M'),
                 'start' => $month->copy()->startOfMonth(),
