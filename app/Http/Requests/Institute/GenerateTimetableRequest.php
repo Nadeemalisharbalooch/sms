@@ -12,6 +12,50 @@ class GenerateTimetableRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        // Support curriculum map format: {"1": {"3": 3, "4": 3}}
+        // Normalize to periods_per_subject format so generate() receives workload overrides
+        $curriculum = $this->input('curriculum');
+        if (is_array($curriculum) && ! $this->has('periods_per_subject')) {
+            $periodsPerSubject = [];
+            $isAssocMap = false;
+
+            foreach ($curriculum as $k => $v) {
+                if ((is_string($k) || is_int($k)) && is_array($v) && ! isset($v['class_id'])) {
+                    $isAssocMap = true;
+                    break;
+                }
+            }
+
+            if ($isAssocMap) {
+                foreach ($curriculum as $rawClassId => $subjectsMap) {
+                    $classId = (int) preg_replace('/\D/', '', (string) $rawClassId);
+                    if ($classId <= 0 || ! is_array($subjectsMap)) {
+                        continue;
+                    }
+
+                    foreach ($subjectsMap as $rawSubjectId => $rawCount) {
+                        $subjectId = (int) preg_replace('/\D/', '', (string) $rawSubjectId);
+                        $count = (int) preg_replace('/\D/', '', (string) $rawCount);
+
+                        if ($subjectId > 0 && $count > 0) {
+                            $periodsPerSubject[] = [
+                                'class_id' => $classId,
+                                'subject_id' => $subjectId,
+                                'weekly_periods' => $count,
+                            ];
+                        }
+                    }
+                }
+
+                if (! empty($periodsPerSubject)) {
+                    $this->merge(['periods_per_subject' => $periodsPerSubject]);
+                }
+            }
+        }
+    }
+
     public function rules(): array
     {
         return [

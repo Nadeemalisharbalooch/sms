@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Institute;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Institute\CurrentProfileUpdateRequest;
 use App\Http\Requests\Institute\UserStoreRequest;
 use App\Http\Requests\Institute\UserUpdateRequest;
 use App\Http\Resources\Institute\UserResource;
@@ -247,7 +248,7 @@ private function extractRoleIds(array $validated): array
     /**
      * Update the currently authenticated user's information.
      */
-    public function updateCurrent(UserUpdateRequest $request)
+    public function updateCurrent(CurrentProfileUpdateRequest $request)
     {
         $user = $request->user();
         $validated = $request->validated();
@@ -266,7 +267,7 @@ private function extractRoleIds(array $validated): array
 
         return ResponseService::success(
             new UserResource($user),
-            'Your information has been updated successfully'
+            'Your profile has been updated successfully'
         );
     }
 

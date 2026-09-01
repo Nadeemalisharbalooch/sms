@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Institute;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Institute\EditCurrentInstituteRequest;
 use App\Http\Requests\Institute\StoreInstituteRequest;
 use App\Http\Requests\Institute\UpdateInstituteRequest;
 use App\Http\Resources\Institute\InstituteResource;
@@ -147,6 +148,31 @@ public function store(StoreInstituteRequest $request)
         'Institute updated successfully'
     );
 }
+
+    /**
+     * Edit the currently active institute for the authenticated user.
+     */
+    public function editCurrentInstitute(EditCurrentInstituteRequest $request)
+    {
+        $user = $request->user();
+
+        $instituteId = InstituteUser::query()
+            ->where('user_id', $user->id)
+            ->where('is_active', true)
+            ->value('institute_id');
+
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $institute = Institute::findOrFail($instituteId);
+        $institute->update($request->validated());
+
+        return ResponseService::success(
+            new InstituteResource($institute->fresh()),
+            'Institute updated successfully'
+        );
+    }
 
     /**
      * Remove the specified resource from storage.

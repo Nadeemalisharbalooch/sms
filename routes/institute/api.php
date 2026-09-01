@@ -135,6 +135,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('institutes/{institute}/activate', [InstituteController::class, 'activate'])
         ->name('institutes.activate');
 
+    Route::put('institutes/current', [InstituteController::class, 'editCurrentInstitute'])
+        ->name('institutes.current.update');
+
     // =====================================================================
     // Module 6: Smart Fees Management
     // =====================================================================

@@ -10,6 +10,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
@@ -56,6 +57,16 @@ class User extends Authenticatable
     public function roomTeachers(): HasMany
     {
         return $this->hasMany(RoomTeacher::class, 'teacher_user_id');
+    }
+
+    public function emailOtps(): HasMany
+    {
+        return $this->hasMany(EmailOtp::class);
+    }
+
+    public function latestOtp(): HasOne
+    {
+        return $this->hasOne(EmailOtp::class)->latestOfMany();
     }
 
     // If you want to restrict to certain role types/guards later, you can customize here.

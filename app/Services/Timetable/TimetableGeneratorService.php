@@ -439,13 +439,29 @@ class TimetableGeneratorService
         $teacherTotalRequested = [];
         foreach ($groupedAllocations as $classAllocs) {
             $cId = $classAllocs->first()->class_id;
-            $subCount = $classAllocs->count();
-            $defPerSub = $subCount > 0 ? (int) max(1, floor($totalSlotsPerWeek / $subCount)) : 1;
+            $subjectGroups = $classAllocs->groupBy('subject_id');
 
-            foreach ($classAllocs as $alloc) {
-                $wKey = $cId.'_'.$alloc->subject_id;
-                $periodsNeeded = isset($workloads[$wKey]) ? $workloads[$wKey]->weekly_periods : $defPerSub;
-                $teacherTotalRequested[$alloc->teacher_user_id] = ($teacherTotalRequested[$alloc->teacher_user_id] ?? 0) + $periodsNeeded;
+            // Determine which subjects have explicit curriculum (workload) entries
+            $hasAnyWorkloads = false;
+            foreach ($subjectGroups as $subjectId => $_allocs) {
+                if (isset($workloads[$cId.'_'.$subjectId])) {
+                    $hasAnyWorkloads = true;
+                    break;
+                }
+            }
+
+            foreach ($subjectGroups as $subjectId => $subjectAllocs) {
+                $wKey = $cId.'_'.$subjectId;
+                // If curriculum exists for this class, only schedule subjects WITH workloads
+                if ($hasAnyWorkloads && ! isset($workloads[$wKey])) {
+                    continue;
+                }
+                $periodsNeeded = isset($workloads[$wKey]) ? $workloads[$wKey]->weekly_periods : 1;
+                $teacherIds = $subjectAllocs->pluck('teacher_user_id')->unique()->values()->all();
+                $periodsPerTeacher = (int) ceil($periodsNeeded / count($teacherIds));
+                foreach ($teacherIds as $tId) {
+                    $teacherTotalRequested[$tId] = ($teacherTotalRequested[$tId] ?? 0) + $periodsPerTeacher;
+                }
             }
         }
 
@@ -461,25 +477,44 @@ class TimetableGeneratorService
 
             $classesScheduledCount++;
 
-            $subjectCount = $classAllocations->count();
-            $defaultPeriodsPerSubject = $subjectCount > 0
-                ? (int) max(1, floor($totalSlotsPerWeek / $subjectCount))
-                : 1;
+            $subjectGroups = $classAllocations->groupBy('subject_id');
+
+            // Determine if this class has explicit curriculum (workload) entries
+            $hasAnyWorkloads = false;
+            foreach ($subjectGroups as $subjectId => $_allocs) {
+                if (isset($workloads[$classId.'_'.$subjectId])) {
+                    $hasAnyWorkloads = true;
+                    break;
+                }
+            }
 
             // Build lecture pool according to Step 2 Subject Weightages
+            // Group by unique subject to avoid duplicating periods for multiple teachers per subject
             $lecturePool = [];
-            foreach ($classAllocations as $alloc) {
-                $workloadKey = $classId.'_'.$alloc->subject_id;
+            foreach ($subjectGroups as $subjectId => $subjectAllocs) {
+                $workloadKey = $classId.'_'.$subjectId;
+
+                // If curriculum exists for this class, only schedule subjects WITH workloads.
+                // Subjects allocated but not in the curriculum are skipped.
+                if ($hasAnyWorkloads && ! isset($workloads[$workloadKey])) {
+                    continue;
+                }
+
                 $periodsNeeded = isset($workloads[$workloadKey])
                     ? $workloads[$workloadKey]->weekly_periods
-                    : $defaultPeriodsPerSubject;
+                    : 1;
+
+                // Distribute this subject's lectures evenly across available teachers
+                $teacherIds = $subjectAllocs->pluck('teacher_user_id')->unique()->values()->all();
+                $teacherCount = count($teacherIds);
 
                 for ($i = 0; $i < $periodsNeeded; $i++) {
+                    $teacherId = $teacherIds[$i % $teacherCount]; // round-robin across teachers
                     $lecturePool[] = [
                         'class_id' => $classId,
                         'section_id' => $sectionId,
-                        'subject_id' => $alloc->subject_id,
-                        'teacher_user_id' => $alloc->teacher_user_id,
+                        'subject_id' => $subjectId,
+                        'teacher_user_id' => $teacherId,
                     ];
                 }
             }
