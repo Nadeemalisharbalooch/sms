@@ -19,6 +19,28 @@ use Spatie\Permission\Models\Role;
 class InstituteController extends Controller
 {
     /**
+     * Return the authenticated user's currently active institute.
+     */
+    public function currentInstitute(Request $request)
+    {
+        $instituteId = InstituteUser::query()
+            ->where('user_id', $request->user()->id)
+            ->where('is_active', true)
+            ->value('institute_id');
+
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $institute = Institute::findOrFail($instituteId);
+
+        return ResponseService::success(
+            new InstituteResource($institute),
+            'Current institute fetched successfully'
+        );
+    }
+
+    /**
      * Display a listing of the resource.
      */
   public function index()

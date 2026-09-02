@@ -17,6 +17,30 @@ use Spatie\Permission\Models\Role;
 class UserController extends Controller
 {
     /**
+     * Return the authenticated user's profile for the active institute.
+     */
+    public function showCurrent(Request $request)
+    {
+        $instituteId = InstituteUser::query()
+            ->where('user_id', $request->user()->id)
+            ->where('is_active', true)
+            ->value('institute_id');
+
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $user = $request->user()->load([
+            'roles' => fn ($query) => $query->where('roles.institute_id', $instituteId),
+        ]);
+
+        return ResponseService::success(
+            new UserResource($user),
+            'Current user retrieved successfully'
+        );
+    }
+
+    /**
      * Return the authenticated user's roles and permissions for the active institute.
      */
     public function currentPermissions(Request $request)

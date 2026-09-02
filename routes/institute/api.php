@@ -24,6 +24,9 @@ $instituteResources = function () {
 
         // Resources
 
+        Route::get('users/current', [UserController::class, 'showCurrent'])
+            ->name('users.current.show');
+
         Route::get('users/current/permissions', [UserController::class, 'currentPermissions'])
             ->name('users.current.permissions');
 
@@ -255,6 +258,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // Dashboard
     Route::get('institutes/dashboard/summary', [DashboardController::class, 'summary'])
         ->name('institutes.dashboard.summary');
+
+    Route::get('institutes/current', [InstituteController::class, 'currentInstitute'])
+        ->name('institutes.current');
 
     Route::apiResource('institutes', InstituteController::class);
 });
