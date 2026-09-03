@@ -14,6 +14,7 @@ use App\Services\ResponseService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Models\Role;
 
 class InstituteController extends Controller
@@ -73,7 +74,10 @@ public function store(StoreInstituteRequest $request)
 
     $institute = DB::transaction(function () use ($request, $user) {
 
-        $institute = Institute::create($request->validated());
+        $data = $request->validated();
+        $data = $this->handleFileUploads($data);
+
+        $institute = Institute::create($data);
 
         $user->update([
             'is_institute' => true,
@@ -163,7 +167,10 @@ public function store(StoreInstituteRequest $request)
      */
    public function update(UpdateInstituteRequest $request, Institute $institute)
 {
-    $institute->update($request->validated());
+    $data = $request->validated();
+    $data = $this->handleFileUploads($data, $institute);
+
+    $institute->update($data);
 
     return ResponseService::success(
         new InstituteResource($institute->fresh()),
@@ -188,12 +195,35 @@ public function store(StoreInstituteRequest $request)
         }
 
         $institute = Institute::findOrFail($instituteId);
-        $institute->update($request->validated());
+
+        $data = $request->validated();
+        $data = $this->handleFileUploads($data, $institute);
+
+        $institute->update($data);
 
         return ResponseService::success(
             new InstituteResource($institute->fresh()),
             'Institute updated successfully'
         );
+    }
+
+    /**
+     * Handle file uploads for logo and favicon.
+     */
+    protected function handleFileUploads(array $data, ?Institute $institute = null): array
+    {
+        foreach (['logo', 'favicon'] as $field) {
+            if (isset($data[$field]) && $data[$field] instanceof \Illuminate\Http\UploadedFile) {
+                // Delete old file if updating
+                if ($institute && $institute->{$field}) {
+                    Storage::disk('public')->delete($institute->{$field});
+                }
+
+                $data[$field] = $data[$field]->store('institutes', 'public');
+            }
+        }
+
+        return $data;
     }
 
     /**
