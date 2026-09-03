@@ -1,5 +1,25 @@
 @import 'tailwindcss';
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer components {
+    .input {
+        width: 100%;
+        margin-top: 0.25rem;
+        border: 1px solid rgb(209 213 219);
+        border-radius: 0.375rem;
+        padding: 0.5rem 0.75rem;
+        color: rgb(17 24 39);
+        background: white;
+    }
+
+    .dark .input {
+        border-color: rgb(75 85 99);
+        color: white;
+        background: rgb(55 65 81);
+    }
+}
+
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 
