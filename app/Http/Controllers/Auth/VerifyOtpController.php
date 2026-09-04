@@ -39,7 +39,7 @@ class VerifyOtpController extends Controller
         }
 
         // Mark email as verified
-        $user->update(['email_verified_at' => now()]);
+        $user->forceFill(['email_verified_at' => now()])->save();
 
         return ResponseService::success(null, 'Email verified successfully. You can now login.');
     }
