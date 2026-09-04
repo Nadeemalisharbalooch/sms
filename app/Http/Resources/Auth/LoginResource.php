@@ -22,6 +22,7 @@ class LoginResource extends JsonResource
             'email'=>$this->email,
             'is_institute'=>$this->is_institute,
             'is_admin'=>$this->is_admin,
+            'verified'=>$this->email_verified_at !== null,
              'type' => 'Bearer',
             'token' => $token,
         ];
