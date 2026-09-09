@@ -29,21 +29,21 @@ class SuperAdminInstituteController extends Controller
     {
         Institute::create($this->validated($request));
 
-        return to_route('institutes.index')->with('success', 'Institute created successfully.');
+        return to_route('institute.index')->with('success', 'Institute created successfully.');
     }
 
     public function update(Request $request, Institute $institute): RedirectResponse
     {
         $institute->update($this->validated($request));
 
-        return to_route('institutes.index')->with('success', 'Institute updated successfully.');
+        return to_route('institute.index')->with('success', 'Institute updated successfully.');
     }
 
     public function destroy(Institute $institute): RedirectResponse
     {
         $institute->delete();
 
-        return to_route('institutes.index')->with('success', 'Institute deleted successfully.');
+        return to_route('institute.index')->with('success', 'Institute deleted successfully.');
     }
 
     private function validated(Request $request): array

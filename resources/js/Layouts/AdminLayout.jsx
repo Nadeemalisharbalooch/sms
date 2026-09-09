@@ -2,7 +2,7 @@ import { Link, usePage } from '@inertiajs/react';
 
 const navigation = [
     { label: 'Dashboard', route: 'dashboard' },
-    { label: 'Institutes', route: 'institutes.index' },
+    { label: 'All Institutes', route: 'institute.index' },
     { label: 'System Settings', route: 'settings' },
 ];
 
@@ -20,7 +20,7 @@ export default function AdminLayout({ children, user, title, onLogout }) {
                 <nav className="flex-1 px-3 py-4">
                     {navigation.map((item) => {
                         const href = route(item.route);
-                        const active = url === new URL(href).pathname;
+                        const active = window.location.pathname === new URL(href, window.location.origin).pathname;
 
                         return (
                             <Link

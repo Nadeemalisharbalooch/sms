@@ -18,7 +18,17 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        $exceptions->shouldRenderJsonWhen(
-            fn (Request $request) => $request->is('api/*'),
-        );
+        $exceptions->renderable(function (\Illuminate\Http\Request $request, \Throwable $e) {
+            if ($e instanceof \Illuminate\Auth\AuthenticationException) {
+                if (! $request->expectsJson()) {
+                    return redirect()->guest(route('login.page'));
+                }
+
+                if ($request->header('X-Inertia') !== 'true') {
+                    return redirect()->guest(route('login.page'));
+                }
+            }
+
+            return null;
+        });
     })->create();

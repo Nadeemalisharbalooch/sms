@@ -3,7 +3,7 @@ import AdminLayout from '../Layouts/AdminLayout';
 
 export default function Dashboard({ user, institutesCount }) {
     return (
-        <AdminLayout user={user} title="Dashboard" onLogout={() => router.post(route('logout'))}>
+        <AdminLayout user={user} title="Dashboard" onLogout={() => router.post(route('logout.web'))}>
             <Head title="Dashboard" />
             <div className="grid gap-6 sm:grid-cols-2">
                 <section className="rounded-lg bg-white p-6 shadow-sm dark:bg-gray-800">

@@ -28,7 +28,7 @@ export default function Settings({ user }) {
     }, [theme]);
 
     return (
-        <AdminLayout user={user} title="System Settings" onLogout={() => router.post(route('logout'))}>
+        <AdminLayout user={user} title="System Settings" onLogout={() => router.post(route('logout.web'))}>
             <Head title="System Settings" />
             <section className="max-w-2xl rounded-lg bg-white p-6 shadow-sm dark:bg-gray-800">
                 <h2 className="text-base font-semibold text-gray-900 dark:text-white">Appearance</h2>
