@@ -11,6 +11,11 @@ const emptyInstitute = {
     favicon: null,
     attendance_mode: 'class',
     is_active: true,
+    // User fields
+    user_name: '',
+    user_email: '',
+    user_phone: '',
+    user_password: '',
 };
 
 export default function InstitutesIndex({ user, institutes }) {
@@ -45,6 +50,11 @@ export default function InstitutesIndex({ user, institutes }) {
     function closeForm() {
         setEditing(null);
         reset();
+    }
+
+    function show(institute) {
+        // Add your show logic here - e.g., show modal or navigate to detail page
+        alert(`Viewing ${institute.name}\nEmail: ${institute.email}\nPhone: ${institute.phone}\nAddress: ${institute.address}`);
     }
 
     function remove(institute) {
@@ -82,6 +92,7 @@ export default function InstitutesIndex({ user, institutes }) {
                                                 </span>
                                             </td>
                                             <td className="space-x-3 px-6 py-4 whitespace-nowrap">
+                                                <button type="button" onClick={() => show(institute)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400">Show</button>
                                                 <button type="button" onClick={() => startEdit(institute)} className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400">Edit</button>
                                                 <button type="button" onClick={() => remove(institute)} className="text-red-600 hover:text-red-800 dark:text-red-400">Delete</button>
                                             </td>
@@ -105,7 +116,13 @@ export default function InstitutesIndex({ user, institutes }) {
                     <Field label="Logo" error={errors.logo}><input type="file" accept="image/*" onChange={(event) => setData('logo', event.target.files[0] || null)} className="input" /></Field>
                     <Field label="Favicon" error={errors.favicon}><input type="file" accept="image/*" onChange={(event) => setData('favicon', event.target.files[0] || null)} className="input" /></Field>
                     <Field label="Attendance mode" error={errors.attendance_mode}><select value={data.attendance_mode} onChange={(event) => setData('attendance_mode', event.target.value)} className="input"><option value="class">Class</option><option value="subject">Subject</option></select></Field>
-                    <Field label="Active" error={errors.is_active}><input type="checkbox" checked={data.is_active} onChange={(event) => setData('is_active', event.target.checked)} className="input" /></Field>
+                    <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-6">
+                        <h3 className="mb-4 text-sm font-medium text-gray-700 dark:text-gray-200">Institute User (Auto-created)</h3>
+                        <Field label="User Name" error={errors.user_name}><input value={data.user_name} onChange={(event) => setData('user_name', event.target.value)} className="input" placeholder="Same as institute name" /></Field>
+                        <Field label="User Email" error={errors.user_email}><input type="email" value={data.user_email} onChange={(event) => setData('user_email', event.target.value)} className="input" placeholder="Same as institute email" /></Field>
+                        <Field label="User Phone" error={errors.user_phone}><input value={data.user_phone} onChange={(event) => setData('user_phone', event.target.value)} className="input" placeholder="Same as institute phone" /></Field>
+                        <Field label="User Password" error={errors.user_password}><input type="password" value={data.user_password} onChange={(event) => setData('user_password', event.target.value)} className="input" required /></Field>
+                    </div>
                     <button type="submit" disabled={processing} className="mt-5 w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-indigo-600 dark:hover:bg-indigo-500">{processing ? 'Saving...' : editing ? 'Update Institute' : 'Create Institute'}</button>
                 </form>
             </div>
