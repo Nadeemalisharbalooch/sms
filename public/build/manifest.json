@@ -1,6 +1,6 @@
 {
-  "_AdminLayout-DcUT9Yas.js": {
-    "file": "assets/AdminLayout-DcUT9Yas.js",
+  "_AdminLayout-ZTuOFI-b.js": {
+    "file": "assets/AdminLayout-ZTuOFI-b.js",
     "name": "AdminLayout",
     "imports": [
       "resources/js/app.jsx"
@@ -59,7 +59,7 @@
     "src": "_instrument-sans-600-normal-DMks36a2.woff"
   },
   "resources/css/app.css": {
-    "file": "assets/app-BOjOX13g.css",
+    "file": "assets/app-BXxeYzTQ.css",
     "name": "app",
     "names": [
       "app.css"
@@ -68,7 +68,7 @@
     "isEntry": true
   },
   "resources/js/Pages/Auth/Login.jsx": {
-    "file": "assets/Login-vXHz99QU.js",
+    "file": "assets/Login-B9HEZyTI.js",
     "name": "Login",
     "src": "resources/js/Pages/Auth/Login.jsx",
     "isDynamicEntry": true,
@@ -77,37 +77,47 @@
     ]
   },
   "resources/js/Pages/Dashboard.jsx": {
-    "file": "assets/Dashboard-D-EOn4jY.js",
+    "file": "assets/Dashboard-DaLdykX9.js",
     "name": "Dashboard",
     "src": "resources/js/Pages/Dashboard.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AdminLayout-DcUT9Yas.js"
+      "_AdminLayout-ZTuOFI-b.js"
     ]
   },
   "resources/js/Pages/Institutes/Index.jsx": {
-    "file": "assets/Index-BavMXpCo.js",
+    "file": "assets/Index-DVn4P40W.js",
     "name": "Index",
     "src": "resources/js/Pages/Institutes/Index.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AdminLayout-DcUT9Yas.js"
+      "_AdminLayout-ZTuOFI-b.js"
+    ]
+  },
+  "resources/js/Pages/Plans/Index.jsx": {
+    "file": "assets/Index-CFbiV55O.js",
+    "name": "Index",
+    "src": "resources/js/Pages/Plans/Index.jsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.jsx",
+      "_AdminLayout-ZTuOFI-b.js"
     ]
   },
   "resources/js/Pages/Settings.jsx": {
-    "file": "assets/Settings-DG6MytDV.js",
+    "file": "assets/Settings-DwF17Mz-.js",
     "name": "Settings",
     "src": "resources/js/Pages/Settings.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AdminLayout-DcUT9Yas.js"
+      "_AdminLayout-ZTuOFI-b.js"
     ]
   },
   "resources/js/app.jsx": {
-    "file": "assets/app-BnEGZm8r.js",
+    "file": "assets/app-La3APAOg.js",
     "name": "app",
     "src": "resources/js/app.jsx",
     "isEntry": true,
@@ -115,10 +125,11 @@
       "resources/js/Pages/Auth/Login.jsx",
       "resources/js/Pages/Dashboard.jsx",
       "resources/js/Pages/Institutes/Index.jsx",
+      "resources/js/Pages/Plans/Index.jsx",
       "resources/js/Pages/Settings.jsx"
     ],
     "css": [
-      "assets/app-BOjOX13g.css"
+      "assets/app-BXxeYzTQ.css"
     ]
   }
 }

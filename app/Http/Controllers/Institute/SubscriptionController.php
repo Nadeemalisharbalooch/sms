@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\InstituteSubscription;
 use App\Models\InstituteUser;
 use App\Models\Plan;
+use App\Models\SubscriptionInvoice;
 use App\Services\ResponseService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class SubscriptionController extends Controller
 {
@@ -33,7 +35,7 @@ class SubscriptionController extends Controller
         }
 
         $subscription = InstituteSubscription::query()
-            ->with('plan')
+            ->with(['plan', 'invoice'])
             ->where('institute_id', $instituteId)
             ->latest()
             ->first();
@@ -99,17 +101,117 @@ class SubscriptionController extends Controller
             return ResponseService::error('This plan is not available', 422);
         }
 
-        $subscription = InstituteSubscription::create([
-            'institute_id' => $instituteId,
-            'plan_id' => $plan->id,
-            'status' => 'pending',
+        [$subscription, $invoice] = DB::transaction(function () use ($instituteId, $plan) {
+            $subscription = InstituteSubscription::create([
+                'institute_id' => $instituteId,
+                'plan_id' => $plan->id,
+                'status' => 'pending',
+            ]);
+
+            $invoice = SubscriptionInvoice::create([
+                'institute_id' => $instituteId,
+                'subscription_id' => $subscription->id,
+                'plan_id' => $plan->id,
+                'amount' => $plan->price,
+                'billing_interval' => $plan->billing_interval,
+                'due_date' => now()->addDays(7)->toDateString(),
+            ]);
+            $invoice->update(['invoice_number' => 'SUB-'.now()->format('Ymd').'-'.str_pad((string) $invoice->id, 6, '0', STR_PAD_LEFT)]);
+
+            return [$subscription, $invoice->fresh()];
+        });
+
+        return ResponseService::success(
+            ['subscription' => $subscription->load('plan'), 'invoice' => $invoice],
+            'Upgrade request submitted. Complete the manual payment and submit its reference for verification.',
+            201,
+        );
+    }
+
+    public function submitPayment(Request $request, SubscriptionInvoice $invoice)
+    {
+        $data = $request->validate([
+            'payment_method' => ['required', 'in:bank,easypaisa,jazzcash,cash,other'],
+            'payment_reference' => ['required', 'string', 'max:255'],
+            'payment_screenshot' => ['required', 'image', 'max:5120'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $instituteId = $this->activeInstituteId($request);
+
+        if (! $instituteId || $invoice->institute_id !== $instituteId) {
+            return ResponseService::notFound('Invoice not found');
+        }
+
+        $isOwner = InstituteUser::query()
+            ->where('user_id', $request->user()->id)
+            ->where('institute_id', $instituteId)
+            ->where('is_owner', true)
+            ->exists();
+
+        if (! $isOwner) {
+            return ResponseService::error('Only the institute owner can submit payment details', 403);
+        }
+
+        if ($invoice->status !== 'pending') {
+            return ResponseService::error('Payment can only be submitted for a pending invoice', 422);
+        }
+
+        $invoice->update([
+            ...collect($data)->except('payment_screenshot')->all(),
+            'payment_screenshot' => $request->hasFile('payment_screenshot')
+                ? $request->file('payment_screenshot')->store('subscription-payment-proofs', 'public')
+                : null,
+            'status' => 'payment_submitted',
+            'payment_submitted_at' => now(),
         ]);
 
         return ResponseService::success(
-            $subscription->load('plan'),
-            'Upgrade request submitted and is pending Super Admin approval',
-            201,
+            $invoice->fresh(),
+            'Payment details submitted and are pending Super Admin verification',
         );
+    }
+
+    public function invoices(Request $request)
+    {
+        $request->validate([
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        $instituteId = $this->activeInstituteId($request);
+
+        if (! $instituteId) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $isOwner = InstituteUser::query()
+            ->where('user_id', $request->user()->id)
+            ->where('institute_id', $instituteId)
+            ->where('is_owner', true)
+            ->exists();
+
+        if (! $isOwner) {
+            return ResponseService::error('Only the institute owner can view subscription invoices', 403);
+        }
+
+        $invoices = SubscriptionInvoice::query()
+            ->where('institute_id', $instituteId)
+            ->with([
+                'plan:id,name,price,billing_interval',
+                'subscription:id,institute_id,plan_id,status,starts_at,ends_at',
+            ])
+            ->latest()
+            ->paginate($request->integer('per_page', 20));
+
+        return ResponseService::success([
+            'invoices' => $invoices->items(),
+            'pagination' => [
+                'current_page' => $invoices->currentPage(),
+                'last_page' => $invoices->lastPage(),
+                'per_page' => $invoices->perPage(),
+                'total' => $invoices->total(),
+            ],
+        ], 'Subscription invoices retrieved successfully');
     }
 
     private function activeInstituteId(Request $request): ?int

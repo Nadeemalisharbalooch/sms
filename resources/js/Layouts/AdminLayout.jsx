@@ -4,6 +4,7 @@ const navigation = [
     { label: 'Dashboard', route: 'dashboard' },
     { label: 'All Institutes', route: 'institute.index' },
     { label: 'Plans & Packages', route: 'plans.index' },
+    { label: 'Subscription Invoices', route: 'subscription-invoices.index' },
     { label: 'System Settings', route: 'settings' },
 ];
 

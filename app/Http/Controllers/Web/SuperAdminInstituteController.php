@@ -7,6 +7,7 @@ use App\Models\Institute;
 use App\Models\InstituteSubscription;
 use App\Models\InstituteUser;
 use App\Models\Plan;
+use App\Models\SubscriptionInvoice;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -27,7 +28,7 @@ class SuperAdminInstituteController extends Controller
                 'email' => $request->user()->email,
             ],
             'institutes' => Institute::query()
-                ->with(['owner:users.id,users.name,users.email,users.phone', 'subscription.plan'])
+                ->with(['owner:users.id,users.name,users.email,users.phone', 'subscription.plan', 'subscription.invoice'])
                 ->latest()
                 ->get(['id', 'public_id', 'name', 'email', 'phone', 'address', 'logo', 'favicon', 'attendance_mode', 'is_active']),
             'plans' => Plan::query()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'price', 'billing_interval', 'trial_days']),
@@ -113,6 +114,34 @@ class SuperAdminInstituteController extends Controller
         $institute->delete();
 
         return to_route('institute.index')->with('success', 'Institute deleted successfully.');
+    }
+
+    public function verifyInvoice(Request $request, SubscriptionInvoice $invoice): RedirectResponse
+    {
+        if ($invoice->status !== 'payment_submitted') {
+            return back()->with('error', 'Only submitted manual payments can be verified.');
+        }
+
+        DB::transaction(function () use ($invoice, $request): void {
+            $invoice->update([
+                'status' => 'paid',
+                'paid_at' => now(),
+                'verified_by_user_id' => $request->user()->id,
+            ]);
+
+            $subscription = $invoice->subscription()->with('plan')->firstOrFail();
+            $now = now();
+            $subscription->update([
+                'status' => 'active',
+                'starts_at' => $now,
+                'ends_at' => $subscription->plan->billing_interval === 'yearly'
+                    ? $now->copy()->addYear()
+                    : $now->copy()->addMonth(),
+                'approved_at' => $now,
+            ]);
+        });
+
+        return back()->with('success', 'Payment verified and subscription activated successfully.');
     }
 
     private function validated(Request $request): array

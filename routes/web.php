@@ -6,6 +6,7 @@ use App\Http\Controllers\Web\LoginController;
 use App\Http\Controllers\Web\LogoutController;
 use App\Http\Controllers\Web\PlanController;
 use App\Http\Controllers\Web\SettingsController;
+use App\Http\Controllers\Web\SubscriptionInvoiceController;
 use App\Http\Controllers\Web\SuperAdminInstituteController;
 use Illuminate\Support\Facades\Route;
 
@@ -26,6 +27,12 @@ Route::resource('institute', SuperAdminInstituteController::class)
     ->middleware('auth');
 Route::resource('plans', PlanController::class)
     ->only(['index', 'store', 'update', 'destroy'])
+    ->middleware('auth');
+Route::get('subscription-invoices', [SubscriptionInvoiceController::class, 'index'])
+    ->name('subscription-invoices.index')
+    ->middleware('auth');
+Route::put('subscription-invoices/{invoice}/verify', [SuperAdminInstituteController::class, 'verifyInvoice'])
+    ->name('subscription-invoices.verify')
     ->middleware('auth');
 
 // Website URL for opening or downloading a class timetable PDF.

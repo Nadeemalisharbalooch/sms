@@ -85,7 +85,7 @@ export default function InstitutesIndex({ user, institutes, plans }) {
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-sm">
                                 <thead className="bg-gray-50 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
-                                    <tr><th className="px-6 py-3">Logo</th><th className="px-6 py-3">Name</th><th className="px-6 py-3">Email</th><th className="px-6 py-3">Plan</th><th className="px-6 py-3">Mode</th><th className="px-6 py-3">Status</th><th className="px-6 py-3">Actions</th></tr>
+                                    <tr><th className="px-6 py-3">Logo</th><th className="px-6 py-3">Name</th><th className="px-6 py-3">Email</th><th className="px-6 py-3">Plan</th><th className="px-6 py-3">Invoice</th><th className="px-6 py-3">Mode</th><th className="px-6 py-3">Status</th><th className="px-6 py-3">Actions</th></tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                                     {institutes.map((institute) => (
@@ -96,6 +96,19 @@ export default function InstitutesIndex({ user, institutes, plans }) {
                                             <td className="px-6 py-4 font-medium">{institute.name}</td>
                                             <td className="px-6 py-4">{institute.email || '-'}</td>
                                             <td className="px-6 py-4"><p>{institute.subscription?.plan?.name || '-'}</p>{institute.subscription && <p className="mt-1 text-xs capitalize text-gray-500">{institute.subscription.status}</p>}</td>
+                                            <td className="px-6 py-4 text-xs">
+                                                {institute.subscription?.invoice ? <>
+                                                    <p className="font-medium text-gray-700 dark:text-gray-200">{institute.subscription.invoice.invoice_number}</p>
+                                                    <p className="mt-1">PKR {institute.subscription.invoice.amount}</p>
+                                                    <p className="mt-1 capitalize text-gray-500">{institute.subscription.invoice.status.replace('_', ' ')}</p>
+                                                    {institute.subscription.invoice.due_date && <p className="mt-1 text-gray-500">Due: {institute.subscription.invoice.due_date}</p>}
+                                                    {institute.subscription.invoice.payment_submitted_at && <p className="mt-1 text-gray-500">Submitted: {new Date(institute.subscription.invoice.payment_submitted_at).toLocaleString()}</p>}
+                                                    {institute.subscription.invoice.payment_method && <p className="mt-1 capitalize text-gray-500">Method: {institute.subscription.invoice.payment_method}</p>}
+                                                    {institute.subscription.invoice.payment_reference && <p className="mt-1 break-all text-gray-500">Reference: {institute.subscription.invoice.payment_reference}</p>}
+                                                    {institute.subscription.invoice.notes && <p className="mt-1 break-words text-gray-500">Note: {institute.subscription.invoice.notes}</p>}
+                                                    {institute.subscription.invoice.payment_screenshot_url && <a href={institute.subscription.invoice.payment_screenshot_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-indigo-600 hover:text-indigo-800 dark:text-indigo-400">View screenshot</a>}
+                                                </> : <span className="text-gray-400">No invoice</span>}
+                                            </td>
                                             <td className="px-6 py-4 capitalize">{institute.attendance_mode}</td>
                                             <td className="px-6 py-4">
                                                 <span className={"px-2 py-1 text-xs rounded " + (institute.is_active ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300")}>
@@ -105,6 +118,7 @@ export default function InstitutesIndex({ user, institutes, plans }) {
                                             <td className="space-x-3 px-6 py-4 whitespace-nowrap">
                                                 <button type="button" onClick={() => show(institute)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400">Show</button>
                                                 <button type="button" onClick={() => startEdit(institute)} className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400">Edit</button>
+                                                {institute.subscription?.invoice?.status === 'payment_submitted' && <button type="button" onClick={() => router.put(route('subscription-invoices.verify', institute.subscription.invoice.id))} className="text-green-600 hover:text-green-800 dark:text-green-400">Verify Payment</button>}
                                                 <button type="button" onClick={() => remove(institute)} className="text-red-600 hover:text-red-800 dark:text-red-400">Delete</button>
                                             </td>
                                         </tr>

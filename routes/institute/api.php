@@ -22,7 +22,7 @@ use App\Http\Controllers\Institute\UserController;
 use Illuminate\Support\Facades\Route;
 
 $instituteResources = function () {
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware(['auth:sanctum', 'active.institute.subscription'])->group(function () {
 
         // Resources
 
@@ -48,7 +48,7 @@ $instituteResources = function () {
 Route::prefix('institutes')->group($instituteResources);
 Route::prefix('institute')->group($instituteResources);
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'active.institute.subscription'])->group(function () {
     Route::patch('institutes/academic-sessions/{academic_session}/activate', [AcademicSessionController::class, 'activate'])
         ->name('institutes.academic-sessions.activate');
 
@@ -275,6 +275,10 @@ Route::middleware('auth:sanctum')->group(function () {
         ->name('institutes.subscription.current');
     Route::post('institutes/subscription/upgrade', [SubscriptionController::class, 'upgrade'])
         ->name('institutes.subscription.upgrade');
+    Route::get('institutes/subscription/invoices', [SubscriptionController::class, 'invoices'])
+        ->name('institutes.subscription.invoices.index');
+    Route::post('institutes/subscription/invoices/{invoice}/payment', [SubscriptionController::class, 'submitPayment'])
+        ->name('institutes.subscription.invoices.payment');
 
     Route::apiResource('institutes', InstituteController::class);
 });
