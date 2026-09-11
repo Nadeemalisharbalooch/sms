@@ -4,6 +4,7 @@ use App\Http\Controllers\Institute\TimetableController;
 use App\Http\Controllers\Web\DashboardController;
 use App\Http\Controllers\Web\LoginController;
 use App\Http\Controllers\Web\LogoutController;
+use App\Http\Controllers\Web\PlanController;
 use App\Http\Controllers\Web\SettingsController;
 use App\Http\Controllers\Web\SuperAdminInstituteController;
 use Illuminate\Support\Facades\Route;
@@ -21,6 +22,9 @@ Route::post('logout', [LogoutController::class, 'store'])->name('logout.web');
 Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard')->middleware('auth');
 Route::get('settings', [SettingsController::class, 'index'])->name('settings')->middleware('auth');
 Route::resource('institute', SuperAdminInstituteController::class)
+    ->only(['index', 'store', 'update', 'destroy'])
+    ->middleware('auth');
+Route::resource('plans', PlanController::class)
     ->only(['index', 'store', 'update', 'destroy'])
     ->middleware('auth');
 

@@ -3,11 +3,13 @@ import { Link, usePage } from '@inertiajs/react';
 const navigation = [
     { label: 'Dashboard', route: 'dashboard' },
     { label: 'All Institutes', route: 'institute.index' },
+    { label: 'Plans & Packages', route: 'plans.index' },
     { label: 'System Settings', route: 'settings' },
 ];
 
 export default function AdminLayout({ children, user, title, onLogout }) {
-    const { url } = usePage();
+    const { props } = usePage();
+    const flash = props.flash || {};
 
     return (
         <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
@@ -45,7 +47,19 @@ export default function AdminLayout({ children, user, title, onLogout }) {
                 <header className="bg-white px-6 py-4 shadow-sm dark:bg-gray-800">
                     <h1 className="text-xl font-semibold text-gray-900 dark:text-white">{title}</h1>
                 </header>
-                <main className="p-6">{children}</main>
+                <main className="p-6">
+                    {flash.success && (
+                        <div role="status" className="mb-6 rounded-md border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-200">
+                            {flash.success}
+                        </div>
+                    )}
+                    {flash.error && (
+                        <div role="alert" className="mb-6 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200">
+                            {flash.error}
+                        </div>
+                    )}
+                    {children}
+                </main>
             </div>
         </div>
     );

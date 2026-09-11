@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOneThrough;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Str;
 
 class Institute extends Model
@@ -32,5 +34,22 @@ class Institute extends Model
  public function getRouteKeyName(): string
     {
         return 'public_id';
+    }
+
+    public function owner(): HasOneThrough
+    {
+        return $this->hasOneThrough(
+            User::class,
+            InstituteUser::class,
+            'institute_id',
+            'id',
+            'id',
+            'user_id',
+        )->where('institute_user.is_owner', true);
+    }
+
+    public function subscription(): HasOne
+    {
+        return $this->hasOne(InstituteSubscription::class)->latestOfMany();
     }
 }

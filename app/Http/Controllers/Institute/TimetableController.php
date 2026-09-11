@@ -612,6 +612,63 @@ class TimetableController extends Controller
     }
 
     /**
+     * Mobile endpoint: return only the authenticated teacher's timetable.
+     * The teacher ID is intentionally never accepted from the client.
+     */
+    public function currentTeacherSchedule(Request $request): JsonResponse
+    {
+        $institute = $this->activeInstitute($request);
+        if ($institute === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $sessionId = $this->activeSessionId($institute->id);
+
+        if ($sessionId === null) {
+            return ResponseService::error('No active academic session exists for the active institute', 422);
+        }
+
+        $slots = TimetableTimeSlot::query()
+            ->where('institute_id', $institute->id)
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->get();
+
+        $entries = TimetableEntry::query()
+            ->where('session_id', $sessionId)
+            ->where('teacher_user_id', $request->user()->id)
+            ->with(['academicClass', 'section', 'subject'])
+            ->get();
+
+        $schedule = [];
+        foreach (self::DAYS as $day) {
+            $daySlots = $slots->filter(fn ($slot) => empty($slot->days) || in_array($day, $slot->days, true));
+            $schedule[$day] = $daySlots->map(function ($slot) use ($entries, $day) {
+                $entry = $entries->first(fn ($item) => $item->day_of_week === $day && $item->time_slot_id === $slot->id);
+
+                return [
+                    'time_slot_id' => $slot->id,
+                    'time_slot_name' => $slot->name,
+                    'start_time' => $slot->start_time,
+                    'end_time' => $slot->end_time,
+                    'is_break' => $slot->is_break,
+                    'entry_id' => $entry?->id,
+                    'class' => $entry?->academicClass ? ['id' => $entry->academicClass->id, 'name' => $entry->academicClass->name] : null,
+                    'section' => $entry?->section ? ['id' => $entry->section->id, 'name' => $entry->section->name] : null,
+                    'subject' => $entry?->subject ? ['id' => $entry->subject->id, 'name' => $entry->subject->name, 'code' => $entry->subject->code] : null,
+                    'room_number' => $entry?->room_number,
+                ];
+            })->values();
+        }
+
+        return ResponseService::success([
+            'session_id' => $sessionId,
+            'teacher' => $request->user()->only(['id', 'name', 'email']),
+            'schedule' => $schedule,
+        ], 'Current teacher timetable retrieved successfully');
+    }
+
+    /**
      * Get institute master grid timetable (All classes, sections, subjects & teachers).
      */
     public function masterSchedule(Request $request): JsonResponse

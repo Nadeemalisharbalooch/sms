@@ -16,9 +16,11 @@ const emptyInstitute = {
     user_email: '',
     user_phone: '',
     user_password: '',
+    plan_id: '',
+    subscription_status: 'trial',
 };
 
-export default function InstitutesIndex({ user, institutes }) {
+export default function InstitutesIndex({ user, institutes, plans }) {
     const [editing, setEditing] = useState(null);
     const { data, setData, post, put, processing, errors, reset } = useForm(emptyInstitute);
 
@@ -40,10 +42,18 @@ export default function InstitutesIndex({ user, institutes }) {
             email: institute.email || '',
             phone: institute.phone || '',
             address: institute.address || '',
-            logo: institute.logo || null,
-            favicon: institute.favicon || null,
+            // File inputs cannot be pre-populated. Keep existing uploads unless a
+            // replacement file is selected.
+            logo: null,
+            favicon: null,
             attendance_mode: institute.attendance_mode || 'class',
             is_active: institute.is_active ?? true,
+            user_name: institute.owner?.name || '',
+            user_email: institute.owner?.email || '',
+            user_phone: institute.owner?.phone || '',
+            user_password: '',
+            plan_id: institute.subscription?.plan_id ? String(institute.subscription.plan_id) : '',
+            subscription_status: institute.subscription?.status || 'trial',
         });
     }
 
@@ -75,7 +85,7 @@ export default function InstitutesIndex({ user, institutes }) {
                         <div className="overflow-x-auto">
                             <table className="w-full text-left text-sm">
                                 <thead className="bg-gray-50 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
-                                    <tr><th className="px-6 py-3">Logo</th><th className="px-6 py-3">Name</th><th className="px-6 py-3">Email</th><th className="px-6 py-3">Mode</th><th className="px-6 py-3">Status</th><th className="px-6 py-3">Actions</th></tr>
+                                    <tr><th className="px-6 py-3">Logo</th><th className="px-6 py-3">Name</th><th className="px-6 py-3">Email</th><th className="px-6 py-3">Plan</th><th className="px-6 py-3">Mode</th><th className="px-6 py-3">Status</th><th className="px-6 py-3">Actions</th></tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
                                     {institutes.map((institute) => (
@@ -85,6 +95,7 @@ export default function InstitutesIndex({ user, institutes }) {
                                             </td>
                                             <td className="px-6 py-4 font-medium">{institute.name}</td>
                                             <td className="px-6 py-4">{institute.email || '-'}</td>
+                                            <td className="px-6 py-4"><p>{institute.subscription?.plan?.name || '-'}</p>{institute.subscription && <p className="mt-1 text-xs capitalize text-gray-500">{institute.subscription.status}</p>}</td>
                                             <td className="px-6 py-4 capitalize">{institute.attendance_mode}</td>
                                             <td className="px-6 py-4">
                                                 <span className={"px-2 py-1 text-xs rounded " + (institute.is_active ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300")}>
@@ -117,11 +128,29 @@ export default function InstitutesIndex({ user, institutes }) {
                     <Field label="Favicon" error={errors.favicon}><input type="file" accept="image/*" onChange={(event) => setData('favicon', event.target.files[0] || null)} className="input" /></Field>
                     <Field label="Attendance mode" error={errors.attendance_mode}><select value={data.attendance_mode} onChange={(event) => setData('attendance_mode', event.target.value)} className="input"><option value="class">Class</option><option value="subject">Subject</option></select></Field>
                     <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-6">
-                        <h3 className="mb-4 text-sm font-medium text-gray-700 dark:text-gray-200">Institute User (Auto-created)</h3>
+                        <h3 className="mb-4 text-sm font-medium text-gray-700 dark:text-gray-200">Package & Subscription</h3>
+                        <Field label="Plan" error={errors.plan_id}>
+                            <select value={data.plan_id} onChange={(event) => setData('plan_id', event.target.value)} className="input">
+                                <option value="">No plan assigned</option>
+                                {plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} — {plan.price}/{plan.billing_interval}</option>)}
+                            </select>
+                        </Field>
+                        <Field label="Subscription status" error={errors.subscription_status}>
+                            <select value={data.subscription_status} onChange={(event) => setData('subscription_status', event.target.value)} className="input" disabled={!data.plan_id}>
+                                <option value="pending">Pending approval</option>
+                                <option value="trial">Trial</option>
+                                <option value="active">Active / Approved</option>
+                                <option value="expired">Expired</option>
+                                <option value="cancelled">Cancelled</option>
+                            </select>
+                        </Field>
+                    </div>
+                    <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-6">
+                        <h3 className="mb-4 text-sm font-medium text-gray-700 dark:text-gray-200">Institute User</h3>
                         <Field label="User Name" error={errors.user_name}><input value={data.user_name} onChange={(event) => setData('user_name', event.target.value)} className="input" placeholder="Same as institute name" /></Field>
                         <Field label="User Email" error={errors.user_email}><input type="email" value={data.user_email} onChange={(event) => setData('user_email', event.target.value)} className="input" placeholder="Same as institute email" /></Field>
                         <Field label="User Phone" error={errors.user_phone}><input value={data.user_phone} onChange={(event) => setData('user_phone', event.target.value)} className="input" placeholder="Same as institute phone" /></Field>
-                        <Field label="User Password" error={errors.user_password}><input type="password" value={data.user_password} onChange={(event) => setData('user_password', event.target.value)} className="input" required /></Field>
+                        <Field label={editing ? 'New Password (optional)' : 'User Password'} error={errors.user_password}><input type="password" value={data.user_password} onChange={(event) => setData('user_password', event.target.value)} className="input" required={!editing} /></Field>
                     </div>
                     <button type="submit" disabled={processing} className="mt-5 w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-indigo-600 dark:hover:bg-indigo-500">{processing ? 'Saving...' : editing ? 'Update Institute' : 'Create Institute'}</button>
                 </form>

@@ -15,6 +15,8 @@ use App\Http\Controllers\Institute\SectionTeacherController;
 use App\Http\Controllers\Institute\StudentController;
 use App\Http\Controllers\Institute\SubjectController;
 use App\Http\Controllers\Institute\SubjectTeacherController;
+use App\Http\Controllers\Institute\SubscriptionController;
+use App\Http\Controllers\Institute\TeacherFeeStatusController;
 use App\Http\Controllers\Institute\TimetableController;
 use App\Http\Controllers\Institute\UserController;
 use Illuminate\Support\Facades\Route;
@@ -246,6 +248,10 @@ Route::middleware('auth:sanctum')->group(function () {
         ->name('institutes.timetable.class');
     Route::get('institutes/timetable/teacher', [TimetableController::class, 'teacherSchedule'])
         ->name('institutes.timetable.teacher');
+    Route::get('institutes/teacher/timetable', [TimetableController::class, 'currentTeacherSchedule'])
+        ->name('institutes.teacher.timetable.current');
+    Route::get('institutes/teacher/students/fee-status', [TeacherFeeStatusController::class, 'index'])
+        ->name('institutes.teacher.students.fee-status');
     Route::get('institutes/timetable/master', [TimetableController::class, 'masterSchedule'])
         ->name('institutes.timetable.master');
 
@@ -261,6 +267,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('institutes/current', [InstituteController::class, 'currentInstitute'])
         ->name('institutes.current');
+
+    // Subscription APIs for the institute frontend/mobile app.
+    Route::get('institutes/plans', [SubscriptionController::class, 'plans'])
+        ->name('institutes.plans.index');
+    Route::get('institutes/subscription', [SubscriptionController::class, 'current'])
+        ->name('institutes.subscription.current');
+    Route::post('institutes/subscription/upgrade', [SubscriptionController::class, 'upgrade'])
+        ->name('institutes.subscription.upgrade');
 
     Route::apiResource('institutes', InstituteController::class);
 });
