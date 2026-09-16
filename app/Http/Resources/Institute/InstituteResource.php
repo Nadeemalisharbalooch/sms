@@ -25,6 +25,13 @@ class InstituteResource extends JsonResource
             'attendance_mode' => $this->attendance_mode,
             'is_active' => $this->is_active,
             'created_at' => $this->created_at,
+
+            // Subscription status for the current institute.
+            'subscription' => $this->whenLoaded('subscription', function () {
+                return [
+                    'status' => $this->subscription?->status,
+                ];
+            }),
         ];
     }
 }

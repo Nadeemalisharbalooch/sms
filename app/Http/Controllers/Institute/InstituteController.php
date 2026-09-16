@@ -33,7 +33,10 @@ class InstituteController extends Controller
             return ResponseService::error('No active institute is associated with this user', 422);
         }
 
-        $institute = Institute::findOrFail($instituteId);
+        $institute = Institute::query()
+            ->whereKey($instituteId)
+            ->with('subscription')
+            ->firstOrFail();
 
         return ResponseService::success(
             new InstituteResource($institute),

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\InstituteSubscription;
 use App\Models\InstituteUser;
 use App\Models\Plan;
+use App\Models\Student;
 use App\Models\SubscriptionInvoice;
 use App\Services\ResponseService;
 use Illuminate\Http\Request;
@@ -13,8 +14,10 @@ use Illuminate\Support\Facades\DB;
 
 class SubscriptionController extends Controller
 {
-    public function plans()
+    public function plans(Request $request)
     {
+        $activeInstituteId = $this->activeInstituteId($request);
+
         $plans = Plan::query()
             ->where('is_active', true)
             ->orderBy('price')
@@ -23,7 +26,29 @@ class SubscriptionController extends Controller
                 'student_limit', 'teacher_limit', 'class_limit', 'features',
             ]);
 
-        return ResponseService::success($plans, 'Available plans fetched successfully');
+        $totalStudents = null;
+        if ($activeInstituteId !== null) {
+            $totalStudents = Student::where('institute_id', $activeInstituteId)->value('id') === null
+                ? 0
+                : Student::where('institute_id', $activeInstituteId)->count();
+        }
+
+        return ResponseService::success(
+            $plans->map(fn (Plan $plan) => [
+                'id' => $plan->id,
+                'name' => $plan->name,
+                'description' => $plan->description,
+                'price' => $plan->price,
+                'billing_interval' => $plan->billing_interval,
+                'trial_days' => $plan->trial_days,
+                'student_limit' => $plan->student_limit,
+                'teacher_limit' => $plan->teacher_limit,
+                'class_limit' => $plan->class_limit,
+                'features' => $plan->features,
+                'total_students' => $totalStudents,
+            ]),
+            'Available plans fetched successfully'
+        );
     }
 
     public function current(Request $request)
