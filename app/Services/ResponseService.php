@@ -25,13 +25,20 @@ class ResponseService
      * @param  mixed  $errors
      * @return \Illuminate\Http\JsonResponse
      */
-    public static function error(string $message = 'Error', int $statusCode = 400, $errors = null)
+    public static function error(string $message = 'Error', int $statusCode = 400, $errors = null, ?array $data = null)
     {
-        return response()->json([
+        $payload = [
             'status' => 'error',
             'message' => $message,
             'errors' => $errors,
-        ], $statusCode);
+        ];
+
+        // Optional extra payload, e.g. subscription block details (blocked, is_expired, days_remaining...)
+        if ($data !== null) {
+            $payload['data'] = $data;
+        }
+
+        return response()->json($payload, $statusCode);
     }
 
     /**

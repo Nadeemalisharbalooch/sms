@@ -72,6 +72,8 @@ class SubscriptionController extends Controller
                 'is_expired' => false,
                 'trial_ended' => false,
                 'days_remaining' => 0,
+                'blocked' => true,
+                'block_reason' => 'no_subscription',
             ], 'No subscription is assigned to this institute');
         }
 
@@ -89,12 +91,18 @@ class SubscriptionController extends Controller
         $trialEnded = ($wasTrial && $isExpired)
             || ($subscription->status === 'expired' && ! $subscription->approved_at && $isExpired);
 
+        $canAccess = in_array($subscription->status, ['trial', 'active'], true) && ! $isExpired;
+
         return ResponseService::success([
             'subscription' => $subscription,
-            'can_access' => in_array($subscription->status, ['trial', 'active'], true) && ! $isExpired,
+            'can_access' => $canAccess,
             'is_expired' => $isExpired || $subscription->status === 'expired',
             'trial_ended' => $trialEnded,
             'days_remaining' => $daysRemaining,
+            'blocked' => ! $canAccess,
+            'block_reason' => $canAccess
+                ? null
+                : ($subscription->status === 'expired' ? 'subscription_expired' : 'subscription_'.$subscription->status),
         ], 'Current subscription fetched successfully');
     }
 
