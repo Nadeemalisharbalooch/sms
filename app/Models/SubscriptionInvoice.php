@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Facades\Storage;
 
 class SubscriptionInvoice extends Model
 {
@@ -48,8 +47,11 @@ class SubscriptionInvoice extends Model
 
     public function getPaymentScreenshotUrlAttribute(): ?string
     {
+        // URLs always use the "/public/storage" prefix so the payment proof is
+        // reachable both when the web server serves storage/ statically and via
+        // the fallback route in routes/web.php (e.g. local dev).
         return $this->payment_screenshot
-            ? Storage::disk('public')->url($this->payment_screenshot)
+            ? url('public/storage/'.$this->payment_screenshot)
             : null;
     }
 }

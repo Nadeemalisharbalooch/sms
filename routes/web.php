@@ -9,6 +9,7 @@ use App\Http\Controllers\Web\SettingsController;
 use App\Http\Controllers\Web\SubscriptionInvoiceController;
 use App\Http\Controllers\Web\SuperAdminInstituteController;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 
 Route::get('/', function () {
     return redirect()->route('login.page');
@@ -34,6 +35,15 @@ Route::get('subscription-invoices', [SubscriptionInvoiceController::class, 'inde
 Route::put('subscription-invoices/{invoice}/verify', [SuperAdminInstituteController::class, 'verifyInvoice'])
     ->name('subscription-invoices.verify')
     ->middleware('auth');
+
+// Fallback for "public/storage/..." URLs. When the web server's document
+// root is the Laravel "public/" directory, a static file does not exist at
+// that path, so Laravel serves the file straight from the public disk.
+Route::get('public/storage/{path}', function (string $path) {
+    abort_if(str_contains($path, '..'), 404);
+
+    return Storage::disk('public')->response($path);
+})->where('path', '.*');
 
 // Website URL for opening or downloading a class timetable PDF.
 Route::get('institutes/timetable/export/classes', [TimetableController::class, 'export'])
