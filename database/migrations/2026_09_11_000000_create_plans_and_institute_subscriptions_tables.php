@@ -27,7 +27,8 @@ return new class extends Migration
             $table->id();
             $table->foreignId('institute_id')->constrained()->cascadeOnDelete();
             $table->foreignId('plan_id')->constrained()->restrictOnDelete();
-            $table->enum('status', ['pending', 'trial', 'active', 'expired', 'cancelled'])->default('pending');
+            $table->string('status', 20)->default('trialing');
+            $table->boolean('blocked')->default(false);
             $table->timestamp('starts_at')->nullable();
             $table->timestamp('ends_at')->nullable();
             $table->timestamp('approved_at')->nullable();

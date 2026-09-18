@@ -30,12 +30,12 @@ class InstituteResource extends JsonResource
             'subscription' => $this->whenLoaded('subscription', function () {
                 $status = $this->subscription?->status;
                 $isExpired = $this->subscription?->ends_at?->isPast()
-                    && in_array($status, ['trial', 'active'], true);
+                    && in_array($status, ['trialing', 'active'], true);
 
                 return [
                     'status' => $status,
                     'is_expired' => $isExpired || $status === 'expired',
-                    'blocked' => $status === null || ! in_array($status, ['trial', 'active'], true) || $isExpired,
+                    'blocked' => $status === null || ! in_array($status, ['trialing', 'active'], true) || $isExpired,
                     'days_remaining' => $this->subscription?->ends_at
                         ? max(0, (int) ceil(now()->diffInSeconds($this->subscription->ends_at, false) / 86400))
                         : null,

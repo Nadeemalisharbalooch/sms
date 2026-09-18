@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 class InstituteSubscription extends Model
 {
     protected $fillable = [
-        'institute_id', 'plan_id', 'status', 'starts_at', 'ends_at', 'approved_at',
+        'institute_id', 'plan_id', 'status', 'blocked', 'starts_at', 'ends_at', 'approved_at',
     ];
 
     protected function casts(): array
@@ -18,6 +18,7 @@ class InstituteSubscription extends Model
             'starts_at' => 'datetime',
             'ends_at' => 'datetime',
             'approved_at' => 'datetime',
+            'blocked' => 'boolean',
         ];
     }
 

@@ -16,7 +16,7 @@ class SubscriptionController extends Controller
 {
     public function plans(Request $request)
     {
-        $activeInstituteId = $this->activeInstituteId($request);
+        $instituteId = $this->activeInstituteId($request);
 
         $plans = Plan::query()
             ->where('is_active', true)
@@ -26,12 +26,9 @@ class SubscriptionController extends Controller
                 'student_limit', 'teacher_limit', 'class_limit', 'features',
             ]);
 
-        $totalStudents = null;
-        if ($activeInstituteId !== null) {
-            $totalStudents = Student::where('institute_id', $activeInstituteId)->value('id') === null
-                ? 0
-                : Student::where('institute_id', $activeInstituteId)->count();
-        }
+        $totalStudents = $instituteId === null
+            ? 0
+            : Student::query()->where('institute_id', $instituteId)->count();
 
         return ResponseService::success(
             $plans->map(fn (Plan $plan) => [
@@ -45,6 +42,8 @@ class SubscriptionController extends Controller
                 'teacher_limit' => $plan->teacher_limit,
                 'class_limit' => $plan->class_limit,
                 'features' => $plan->features,
+                // This is the requesting institute's usage, included so the
+                // client can compare each plan limit without another request.
                 'total_students' => $totalStudents,
             ]),
             'Available plans fetched successfully'
@@ -60,7 +59,7 @@ class SubscriptionController extends Controller
         }
 
         $subscription = InstituteSubscription::query()
-            ->with(['plan', 'invoice'])
+            ->with('plan')
             ->where('institute_id', $instituteId)
             ->latest()
             ->first();
@@ -77,32 +76,32 @@ class SubscriptionController extends Controller
             ], 'No subscription is assigned to this institute');
         }
 
-        $wasTrial = $subscription->status === 'trial';
         $isExpired = $subscription->ends_at?->isPast() ?? false;
-
-        if ($isExpired && in_array($subscription->status, ['trial', 'active'], true)) {
-            $subscription->update(['status' => 'expired']);
-            $subscription->refresh();
-        }
+        $status = $isExpired && in_array($subscription->status, ['trialing', 'active'], true)
+            ? 'expired'
+            : $subscription->status;
 
         $daysRemaining = $subscription->ends_at
             ? max(0, (int) ceil(now()->diffInSeconds($subscription->ends_at, false) / 86400))
             : null;
-        $trialEnded = ($wasTrial && $isExpired)
-            || ($subscription->status === 'expired' && ! $subscription->approved_at && $isExpired);
-
-        $canAccess = in_array($subscription->status, ['trial', 'active'], true) && ! $isExpired;
+        $canAccess = ! $subscription->blocked && in_array($status, ['trialing', 'active'], true) && ! $isExpired;
 
         return ResponseService::success([
-            'subscription' => $subscription,
-            'can_access' => $canAccess,
-            'is_expired' => $isExpired || $subscription->status === 'expired',
-            'trial_ended' => $trialEnded,
-            'days_remaining' => $daysRemaining,
-            'blocked' => ! $canAccess,
-            'block_reason' => $canAccess
-                ? null
-                : ($subscription->status === 'expired' ? 'subscription_expired' : 'subscription_'.$subscription->status),
+            'subscription' => [
+                'id' => $subscription->id,
+                'institute_id' => $subscription->institute_id,
+                'status' => $status,
+                'blocked' => $subscription->blocked || ! $canAccess,
+                'starts_at' => $subscription->starts_at,
+                'ends_at' => $subscription->ends_at,
+                'days_remaining' => $daysRemaining,
+                'plan' => $subscription->plan ? [
+                    'id' => $subscription->plan->id,
+                    'name' => $subscription->plan->name,
+                    'student_limit' => $subscription->plan->student_limit,
+                ] : null,
+                'usage' => ['total_students' => Student::where('institute_id', $instituteId)->count()],
+            ],
         ], 'Current subscription fetched successfully');
     }
 
@@ -134,16 +133,9 @@ class SubscriptionController extends Controller
             return ResponseService::error('This plan is not available', 422);
         }
 
-        [$subscription, $invoice] = DB::transaction(function () use ($instituteId, $plan) {
-            $subscription = InstituteSubscription::create([
-                'institute_id' => $instituteId,
-                'plan_id' => $plan->id,
-                'status' => 'pending',
-            ]);
-
+        $invoice = DB::transaction(function () use ($instituteId, $plan) {
             $invoice = SubscriptionInvoice::create([
                 'institute_id' => $instituteId,
-                'subscription_id' => $subscription->id,
                 'plan_id' => $plan->id,
                 'amount' => $plan->price,
                 'billing_interval' => $plan->billing_interval,
@@ -151,13 +143,12 @@ class SubscriptionController extends Controller
             ]);
             $invoice->update(['invoice_number' => 'SUB-'.now()->format('Ymd').'-'.str_pad((string) $invoice->id, 6, '0', STR_PAD_LEFT)]);
 
-            return [$subscription, $invoice->fresh()];
+            return $invoice->fresh();
         });
 
         return ResponseService::success(
-            ['subscription' => $subscription->load('plan'), 'invoice' => $invoice],
-            'Upgrade request submitted. Complete the manual payment and submit its reference for verification.',
-            201,
+            ['invoice' => $this->invoicePayload($invoice)],
+            'Invoice generated. Please complete manual payment.',
         );
     }
 
@@ -186,8 +177,8 @@ class SubscriptionController extends Controller
             return ResponseService::error('Only the institute owner can submit payment details', 403);
         }
 
-        if ($invoice->status !== 'pending') {
-            return ResponseService::error('Payment can only be submitted for a pending invoice', 422);
+        if ($invoice->status !== 'open') {
+            return ResponseService::error('Payment can only be submitted for an open invoice', 422);
         }
 
         $invoice->update([
@@ -195,12 +186,12 @@ class SubscriptionController extends Controller
             'payment_screenshot' => $request->hasFile('payment_screenshot')
                 ? $request->file('payment_screenshot')->store('subscription-payment-proofs', 'public')
                 : null,
-            'status' => 'payment_submitted',
+            'status' => 'verification_pending',
             'payment_submitted_at' => now(),
         ]);
 
         return ResponseService::success(
-            $invoice->fresh(),
+            $this->invoicePayload($invoice->fresh(), true),
             'Payment details submitted and are pending Super Admin verification',
         );
     }
@@ -237,7 +228,7 @@ class SubscriptionController extends Controller
             ->paginate($request->integer('per_page', 20));
 
         return ResponseService::success([
-            'invoices' => $invoices->items(),
+            'invoices' => collect($invoices->items())->map(fn (SubscriptionInvoice $invoice) => $this->invoicePayload($invoice)),
             'pagination' => [
                 'current_page' => $invoices->currentPage(),
                 'last_page' => $invoices->lastPage(),
@@ -253,5 +244,33 @@ class SubscriptionController extends Controller
             ->where('user_id', $request->user()->id)
             ->where('is_active', true)
             ->value('institute_id');
+    }
+
+    private function invoicePayload(SubscriptionInvoice $invoice, bool $includePaymentDetails = false): array
+    {
+        $payload = [
+            'id' => $invoice->id,
+            'invoice_number' => $invoice->invoice_number,
+            'amount' => $invoice->amount,
+            'currency' => $invoice->currency,
+            'status' => $invoice->status,
+            'plan_id' => $invoice->plan_id,
+            'due_date' => $invoice->due_date,
+            'created_at' => $invoice->created_at,
+        ];
+
+        if ($invoice->relationLoaded('plan') && $invoice->plan) {
+            $payload['plan'] = ['id' => $invoice->plan->id, 'name' => $invoice->plan->name];
+        }
+
+        if ($includePaymentDetails) {
+            $payload += [
+                'payment_reference' => $invoice->payment_reference,
+                'payment_submitted_at' => $invoice->payment_submitted_at,
+                'payment_screenshot_url' => $invoice->payment_screenshot_url,
+            ];
+        }
+
+        return $payload;
     }
 }

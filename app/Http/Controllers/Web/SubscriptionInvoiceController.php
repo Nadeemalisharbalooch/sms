@@ -13,7 +13,7 @@ class SubscriptionInvoiceController extends Controller
     public function index(Request $request): Response
     {
         $filters = $request->validate([
-            'status' => ['nullable', 'in:pending,payment_submitted,paid,cancelled'],
+            'status' => ['nullable', 'in:open,verification_pending,paid,void'],
             'search' => ['nullable', 'string', 'max:255'],
         ]);
 

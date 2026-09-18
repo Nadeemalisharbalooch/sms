@@ -38,7 +38,6 @@ class SuperAdminInstituteController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $this->validated($request);
-        $subscriptionData = $this->validatedSubscription($request);
         $this->storeUploadedImages($request, $validated);
 
         // Create institute
@@ -64,8 +63,6 @@ class SuperAdminInstituteController extends Controller
             'is_active' => true,
         ]);
 
-        $this->syncSubscription($institute, $subscriptionData);
-
         return to_route('institute.index')->with('success', 'Institute and user created successfully.');
     }
 
@@ -74,7 +71,6 @@ class SuperAdminInstituteController extends Controller
         $validated = $this->validated($request);
         $owner = $institute->owner;
         $userValidated = $this->validatedUser($request, $owner?->id);
-        $subscriptionData = $this->validatedSubscription($request);
         $this->storeUploadedImages($request, $validated);
 
         // Do not overwrite existing image paths when no replacement was uploaded.
@@ -86,7 +82,7 @@ class SuperAdminInstituteController extends Controller
             unset($validated['favicon']);
         }
 
-        DB::transaction(function () use ($institute, $validated, $owner, $userValidated, $subscriptionData): void {
+        DB::transaction(function () use ($institute, $validated, $owner, $userValidated): void {
             $institute->update($validated);
 
             if ($owner) {
@@ -103,7 +99,6 @@ class SuperAdminInstituteController extends Controller
                 $owner->update($ownerData);
             }
 
-            $this->syncSubscription($institute, $subscriptionData);
         });
 
         return to_route('institute.index')->with('success', 'Institute updated successfully.');
@@ -118,7 +113,7 @@ class SuperAdminInstituteController extends Controller
 
     public function verifyInvoice(Request $request, SubscriptionInvoice $invoice): RedirectResponse
     {
-        if ($invoice->status !== 'payment_submitted') {
+        if ($invoice->status !== 'verification_pending') {
             return back()->with('error', 'Only submitted manual payments can be verified.');
         }
 
@@ -129,16 +124,25 @@ class SuperAdminInstituteController extends Controller
                 'verified_by_user_id' => $request->user()->id,
             ]);
 
-            $subscription = $invoice->subscription()->with('plan')->firstOrFail();
+            $subscription = InstituteSubscription::query()
+                ->where('institute_id', $invoice->institute_id)
+                ->latest()
+                ->lockForUpdate()
+                ->first() ?? new InstituteSubscription(['institute_id' => $invoice->institute_id]);
             $now = now();
-            $subscription->update([
+            $endsAt = $subscription->ends_at && $subscription->ends_at->isFuture()
+                ? $subscription->ends_at->copy()
+                : $now->copy();
+            $subscription->fill([
+                'plan_id' => $invoice->plan_id,
                 'status' => 'active',
-                'starts_at' => $now,
-                'ends_at' => $subscription->plan->billing_interval === 'yearly'
-                    ? $now->copy()->addYear()
-                    : $now->copy()->addMonth(),
+                'blocked' => false,
+                'starts_at' => $subscription->starts_at ?? $now,
+                'ends_at' => $invoice->billing_interval === 'yearly'
+                    ? $endsAt->addYear()
+                    : $endsAt->addMonth(),
                 'approved_at' => $now,
-            ]);
+            ])->save();
         });
 
         return back()->with('success', 'Payment verified and subscription activated successfully.');
@@ -178,46 +182,4 @@ class SuperAdminInstituteController extends Controller
         ]);
     }
 
-    private function validatedSubscription(Request $request): array
-    {
-        return $request->validate([
-            'plan_id' => ['nullable', 'integer', 'exists:plans,id'],
-            'subscription_status' => ['nullable', 'in:pending,trial,active,expired,cancelled'],
-        ]);
-    }
-
-    private function syncSubscription(Institute $institute, array $data): void
-    {
-        if (empty($data['plan_id'])) {
-            return;
-        }
-
-        $plan = Plan::findOrFail($data['plan_id']);
-        $subscription = InstituteSubscription::query()
-            ->where('institute_id', $institute->id)
-            ->latest()
-            ->first() ?? new InstituteSubscription(['institute_id' => $institute->id]);
-        $status = $data['subscription_status'] ?? 'pending';
-        $now = now();
-
-        $attributes = [
-            'plan_id' => $plan->id,
-            'status' => $status,
-        ];
-
-        if (! $subscription->exists || $subscription->plan_id !== $plan->id || $subscription->status !== $status) {
-            $attributes['starts_at'] = $now;
-            $attributes['ends_at'] = match ($status) {
-                'trial' => $now->copy()->addDays($plan->trial_days),
-                'active' => $plan->billing_interval === 'yearly' ? $now->copy()->addYear() : $now->copy()->addMonth(),
-                default => null,
-            };
-        }
-
-        if ($status === 'active' && ! $subscription->approved_at) {
-            $attributes['approved_at'] = $now;
-        }
-
-        $subscription->fill($attributes)->save();
-    }
 }

@@ -74,21 +74,21 @@ class EnsureActiveInstituteSubscription
             ]);
         }
 
-        if ($subscription->ends_at?->isPast() && in_array($subscription->status, ['trial', 'active'], true)) {
-            $subscription->update(['status' => 'expired']);
-            $subscription->refresh();
-        }
+        // Expiry is derived at read time. A request must never write a subscription.
+        $status = $subscription->ends_at?->isPast() && in_array($subscription->status, ['trialing', 'active'], true)
+            ? 'expired'
+            : $subscription->status;
 
-        if (! in_array($subscription->status, ['trial', 'active'], true)) {
-            $isExpired = $subscription->status === 'expired';
+        if ($subscription->blocked || ! in_array($status, ['trialing', 'active'], true)) {
+            $isExpired = $status === 'expired';
             $message = $isExpired
                 ? 'Your trial or plan has expired. Please upgrade your plan.'
-                : 'Your subscription is '.$subscription->status.'. Please contact the Super Admin.';
+                : 'Your subscription is '.$status.'. Please contact the Super Admin.';
 
             return ResponseService::error($message, 403, null, [
                 'blocked' => true,
-                'reason' => $isExpired ? 'subscription_expired' : 'subscription_'.$subscription->status,
-                'subscription_status' => $subscription->status,
+                'reason' => $isExpired ? 'subscription_expired' : ($subscription->blocked ? 'subscription_blocked' : 'subscription_'.$status),
+                'subscription_status' => $status,
                 'is_expired' => $isExpired,
                 'days_remaining' => 0,
             ]);
@@ -98,7 +98,7 @@ class EnsureActiveInstituteSubscription
         $request->attributes->set('subscription_block_info', [
             'blocked' => false,
             'reason' => null,
-            'subscription_status' => $subscription->status,
+            'subscription_status' => $status,
             'is_expired' => false,
             'days_remaining' => $subscription->ends_at
                 ? max(0, (int) ceil(now()->diffInSeconds($subscription->ends_at, false) / 86400))

@@ -17,7 +17,7 @@ const emptyInstitute = {
     user_phone: '',
     user_password: '',
     plan_id: '',
-    subscription_status: 'trial',
+    subscription_status: 'trialing',
 };
 
 export default function InstitutesIndex({ user, institutes, plans }) {
@@ -53,7 +53,7 @@ export default function InstitutesIndex({ user, institutes, plans }) {
             user_phone: institute.owner?.phone || '',
             user_password: '',
             plan_id: institute.subscription?.plan_id ? String(institute.subscription.plan_id) : '',
-            subscription_status: institute.subscription?.status || 'trial',
+            subscription_status: institute.subscription?.status || 'trialing',
         });
     }
 
@@ -118,7 +118,7 @@ export default function InstitutesIndex({ user, institutes, plans }) {
                                             <td className="space-x-3 px-6 py-4 whitespace-nowrap">
                                                 <button type="button" onClick={() => show(institute)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400">Show</button>
                                                 <button type="button" onClick={() => startEdit(institute)} className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400">Edit</button>
-                                                {institute.subscription?.invoice?.status === 'payment_submitted' && <button type="button" onClick={() => router.put(route('subscription-invoices.verify', institute.subscription.invoice.id))} className="text-green-600 hover:text-green-800 dark:text-green-400">Verify Payment</button>}
+                                                {institute.subscription?.invoice?.status === 'verification_pending' && <button type="button" onClick={() => router.put(route('subscription-invoices.verify', institute.subscription.invoice.id))} className="text-green-600 hover:text-green-800 dark:text-green-400">Verify Payment</button>}
                                                 <button type="button" onClick={() => remove(institute)} className="text-red-600 hover:text-red-800 dark:text-red-400">Delete</button>
                                             </td>
                                         </tr>
@@ -141,7 +141,7 @@ export default function InstitutesIndex({ user, institutes, plans }) {
                     <Field label="Logo" error={errors.logo}><input type="file" accept="image/*" onChange={(event) => setData('logo', event.target.files[0] || null)} className="input" /></Field>
                     <Field label="Favicon" error={errors.favicon}><input type="file" accept="image/*" onChange={(event) => setData('favicon', event.target.files[0] || null)} className="input" /></Field>
                     <Field label="Attendance mode" error={errors.attendance_mode}><select value={data.attendance_mode} onChange={(event) => setData('attendance_mode', event.target.value)} className="input"><option value="class">Class</option><option value="subject">Subject</option></select></Field>
-                    <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-6">
+                    <div className="hidden">
                         <h3 className="mb-4 text-sm font-medium text-gray-700 dark:text-gray-200">Package & Subscription</h3>
                         <Field label="Plan" error={errors.plan_id}>
                             <select value={data.plan_id} onChange={(event) => setData('plan_id', event.target.value)} className="input">
@@ -151,11 +151,10 @@ export default function InstitutesIndex({ user, institutes, plans }) {
                         </Field>
                         <Field label="Subscription status" error={errors.subscription_status}>
                             <select value={data.subscription_status} onChange={(event) => setData('subscription_status', event.target.value)} className="input" disabled={!data.plan_id}>
-                                <option value="pending">Pending approval</option>
-                                <option value="trial">Trial</option>
+                                <option value="trialing">Trial</option>
                                 <option value="active">Active / Approved</option>
                                 <option value="expired">Expired</option>
-                                <option value="cancelled">Cancelled</option>
+                                <option value="canceled">Canceled</option>
                             </select>
                         </Field>
                     </div>
