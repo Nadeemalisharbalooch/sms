@@ -1,6 +1,6 @@
 {
-  "_AdminLayout-B2I6MYBT.js": {
-    "file": "assets/AdminLayout-B2I6MYBT.js",
+  "_AdminLayout-D2_U2z0X.js": {
+    "file": "assets/AdminLayout-D2_U2z0X.js",
     "name": "AdminLayout",
     "imports": [
       "resources/js/app.jsx"
@@ -68,7 +68,7 @@
     "isEntry": true
   },
   "resources/js/Pages/Auth/Login.jsx": {
-    "file": "assets/Login-DZrBM7Yw.js",
+    "file": "assets/Login-Dr5SiSFs.js",
     "name": "Login",
     "src": "resources/js/Pages/Auth/Login.jsx",
     "isDynamicEntry": true,
@@ -77,57 +77,57 @@
     ]
   },
   "resources/js/Pages/Dashboard.jsx": {
-    "file": "assets/Dashboard-S9u92J-7.js",
+    "file": "assets/Dashboard-Df3GhZYn.js",
     "name": "Dashboard",
     "src": "resources/js/Pages/Dashboard.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AdminLayout-B2I6MYBT.js"
+      "_AdminLayout-D2_U2z0X.js"
     ]
   },
   "resources/js/Pages/Institutes/Index.jsx": {
-    "file": "assets/Index-J0sPJoqk.js",
+    "file": "assets/Index-BmA7i4QT.js",
     "name": "Index",
     "src": "resources/js/Pages/Institutes/Index.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AdminLayout-B2I6MYBT.js"
+      "_AdminLayout-D2_U2z0X.js"
     ]
   },
   "resources/js/Pages/Plans/Index.jsx": {
-    "file": "assets/Index-Cu9P0JOc.js",
+    "file": "assets/Index-gbtjBlBr.js",
     "name": "Index",
     "src": "resources/js/Pages/Plans/Index.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AdminLayout-B2I6MYBT.js"
+      "_AdminLayout-D2_U2z0X.js"
     ]
   },
   "resources/js/Pages/Settings.jsx": {
-    "file": "assets/Settings-D2-umd86.js",
+    "file": "assets/Settings-rW_YWAuV.js",
     "name": "Settings",
     "src": "resources/js/Pages/Settings.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AdminLayout-B2I6MYBT.js"
+      "_AdminLayout-D2_U2z0X.js"
     ]
   },
   "resources/js/Pages/SubscriptionInvoices/Index.jsx": {
-    "file": "assets/Index-BpItGWaN.js",
+    "file": "assets/Index-CY7gciVL.js",
     "name": "Index",
     "src": "resources/js/Pages/SubscriptionInvoices/Index.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AdminLayout-B2I6MYBT.js"
+      "_AdminLayout-D2_U2z0X.js"
     ]
   },
   "resources/js/app.jsx": {
-    "file": "assets/app-CgW8rSMe.js",
+    "file": "assets/app-B_2rvsxD.js",
     "name": "app",
     "src": "resources/js/app.jsx",
     "isEntry": true,
