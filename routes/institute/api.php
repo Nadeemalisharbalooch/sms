@@ -279,6 +279,8 @@ Route::middleware(['auth:sanctum', 'active.institute.subscription'])->group(func
         ->name('institutes.subscription.invoices.index');
     Route::post('institutes/subscription/invoices/{invoice}/payment', [SubscriptionController::class, 'submitPayment'])
         ->name('institutes.subscription.invoices.payment');
+    Route::post('institutes/subscription/invoices/{invoice}/cancel', [SubscriptionController::class, 'cancelInvoice'])
+        ->name('institutes.subscription.invoices.cancel');
 
     Route::apiResource('institutes', InstituteController::class);
 });

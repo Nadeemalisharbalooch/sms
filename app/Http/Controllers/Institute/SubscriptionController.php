@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Institute;
 
 use App\Http\Controllers\Controller;
+use App\Models\Institute;
 use App\Models\InstituteSubscription;
 use App\Models\InstituteUser;
 use App\Models\Plan;
@@ -133,6 +134,38 @@ class SubscriptionController extends Controller
             return ResponseService::error('This plan is not available', 422);
         }
 
+        if (strtolower(trim($plan->name)) === 'trial') {
+            $subscription = DB::transaction(function () use ($instituteId, $plan) {
+                $subscription = InstituteSubscription::query()
+                    ->where('institute_id', $instituteId)
+                    ->latest()
+                    ->lockForUpdate()
+                    ->first() ?? new InstituteSubscription(['institute_id' => $instituteId]);
+                $startsAt = now();
+                $subscription->fill([
+                    'plan_id' => $plan->id,
+                    'status' => 'trialing',
+                    'blocked' => false,
+                    'starts_at' => $startsAt,
+                    'ends_at' => $startsAt->copy()->addDays($plan->trial_days),
+                    'approved_at' => null,
+                ])->save();
+
+                return $subscription->fresh('plan');
+            });
+
+            return ResponseService::success([
+                'invoice' => null,
+                'subscription' => [
+                    'id' => $subscription->id,
+                    'status' => $subscription->status,
+                    'starts_at' => $subscription->starts_at,
+                    'ends_at' => $subscription->ends_at,
+                    'plan' => ['id' => $plan->id, 'name' => $plan->name],
+                ],
+            ], 'Trial started. No invoice is required.');
+        }
+
         $invoice = DB::transaction(function () use ($instituteId, $plan) {
             $invoice = SubscriptionInvoice::create([
                 'institute_id' => $instituteId,
@@ -177,18 +210,34 @@ class SubscriptionController extends Controller
             return ResponseService::error('Only the institute owner can submit payment details', 403);
         }
 
-        if ($invoice->status !== 'open') {
-            return ResponseService::error('Payment can only be submitted for an open invoice', 422);
-        }
+        $paymentScreenshot = $request->file('payment_screenshot')
+            ->store('subscription-payment-proofs', 'public');
 
-        $invoice->update([
-            ...collect($data)->except('payment_screenshot')->all(),
-            'payment_screenshot' => $request->hasFile('payment_screenshot')
-                ? $request->file('payment_screenshot')->store('subscription-payment-proofs', 'public')
-                : null,
-            'status' => 'verification_pending',
-            'payment_submitted_at' => now(),
-        ]);
+        $invoice = DB::transaction(function () use ($data, $instituteId, $invoice, $paymentScreenshot) {
+            // Serialise payment submissions for an institute so only one invoice
+            // can progress to verification at a time.
+            Institute::query()->whereKey($instituteId)->lockForUpdate()->firstOrFail();
+            $invoice = SubscriptionInvoice::query()->lockForUpdate()->findOrFail($invoice->id);
+
+            if ($invoice->status !== 'open') {
+                abort(422, 'Payment can only be submitted for an open invoice');
+            }
+
+            $invoice->update([
+                ...collect($data)->except('payment_screenshot')->all(),
+                'payment_screenshot' => $paymentScreenshot,
+                'status' => 'verification_pending',
+                'payment_submitted_at' => now(),
+            ]);
+
+            SubscriptionInvoice::query()
+                ->where('institute_id', $instituteId)
+                ->where('status', 'open')
+                ->whereKeyNot($invoice->id)
+                ->update(['status' => 'void']);
+
+            return $invoice->fresh();
+        });
 
         return ResponseService::success(
             $this->invoicePayload($invoice->fresh(), true),
@@ -238,12 +287,45 @@ class SubscriptionController extends Controller
         ], 'Subscription invoices retrieved successfully');
     }
 
+    public function cancelInvoice(Request $request, SubscriptionInvoice $invoice)
+    {
+        $instituteId = $this->activeInstituteId($request);
+
+        if (! $instituteId || $invoice->institute_id !== $instituteId) {
+            return ResponseService::notFound('Invoice not found');
+        }
+
+        if (! $this->isInstituteOwner($request, $instituteId)) {
+            return ResponseService::error('Only the institute owner can cancel an invoice', 403);
+        }
+
+        if ($invoice->status !== 'open') {
+            return ResponseService::error('Only an open invoice can be cancelled', 422);
+        }
+
+        $invoice->update(['status' => 'void']);
+
+        return ResponseService::success(
+            $this->invoicePayload($invoice->fresh()),
+            'Invoice cancelled successfully.',
+        );
+    }
+
     private function activeInstituteId(Request $request): ?int
     {
         return InstituteUser::query()
             ->where('user_id', $request->user()->id)
             ->where('is_active', true)
             ->value('institute_id');
+    }
+
+    private function isInstituteOwner(Request $request, int $instituteId): bool
+    {
+        return InstituteUser::query()
+            ->where('user_id', $request->user()->id)
+            ->where('institute_id', $instituteId)
+            ->where('is_owner', true)
+            ->exists();
     }
 
     private function invoicePayload(SubscriptionInvoice $invoice, bool $includePaymentDetails = false): array
