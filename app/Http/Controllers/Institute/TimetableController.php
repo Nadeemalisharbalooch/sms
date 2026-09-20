@@ -24,6 +24,7 @@ use App\Models\TimetableEntry;
 use App\Models\TimetableTimeSlot;
 use App\Models\TimetableWorkload;
 use App\Models\User;
+use App\Services\NotificationService;
 use App\Services\ResponseService;
 use App\Services\Timetable\TimetableExportService;
 use App\Services\Timetable\TimetableGeneratorService;
@@ -249,6 +250,8 @@ class TimetableController extends Controller
                 $workloadOverrides
             );
 
+            NotificationService::timetablePublished($institute->id, $sessionId, $classIdsToSchedule);
+
             return ResponseService::success($result, 'Timetable configured and generated successfully');
         } catch (\RuntimeException $e) {
             return ResponseService::error($e->getMessage(), 422);
@@ -435,6 +438,8 @@ class TimetableController extends Controller
                 $validated['overwrite_existing'] ?? true,
                 $validated['periods_per_subject'] ?? []
             );
+
+            NotificationService::timetablePublished($institute->id, $sessionId, $validated['class_ids'] ?? []);
 
             return ResponseService::success($result, 'Timetable generated successfully');
         } catch (\RuntimeException $e) {

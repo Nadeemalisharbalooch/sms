@@ -10,7 +10,7 @@ class SubscriptionInvoice extends Model
     protected $fillable = [
         'institute_id', 'subscription_id', 'plan_id', 'invoice_number', 'amount', 'currency',
         'billing_interval', 'due_date', 'status', 'payment_method', 'payment_reference',
-        'payment_screenshot', 'payment_submitted_at', 'paid_at', 'verified_by_user_id', 'notes',
+        'payment_screenshot', 'payment_submitted_at', 'paid_at', 'verified_by_user_id', 'notes', 'rejection_reason',
     ];
 
     protected $appends = ['payment_screenshot_url'];

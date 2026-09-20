@@ -5,12 +5,14 @@ const navigation = [
     { label: 'All Institutes', route: 'institute.index' },
     { label: 'Plans & Packages', route: 'plans.index' },
     { label: 'Subscription Invoices', route: 'subscription-invoices.index' },
+    { label: 'Notifications', route: 'notifications.index' },
     { label: 'System Settings', route: 'settings' },
 ];
 
 export default function AdminLayout({ children, user, title, onLogout }) {
     const { props } = usePage();
     const flash = props.flash || {};
+    const unreadCount = (props.notifications && props.notifications.unread_count) || 0;
 
     return (
         <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
@@ -45,8 +47,22 @@ export default function AdminLayout({ children, user, title, onLogout }) {
             </aside>
 
             <div className="md:ml-64">
-                <header className="bg-white px-6 py-4 shadow-sm dark:bg-gray-800">
+                <header className="flex items-center justify-between bg-white px-6 py-4 shadow-sm dark:bg-gray-800">
                     <h1 className="text-xl font-semibold text-gray-900 dark:text-white">{title}</h1>
+                    <Link
+                        href={route('notifications.index')}
+                        className="relative rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white"
+                        title="Notifications"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-6 w-6">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
+                        </svg>
+                        {unreadCount > 0 && (
+                            <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-xs font-semibold text-white">
+                                {unreadCount > 99 ? '99+' : unreadCount}
+                            </span>
+                        )}
+                    </Link>
                 </header>
                 <main className="p-6">
                     {flash.success && (

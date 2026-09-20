@@ -4,6 +4,7 @@ use App\Http\Controllers\Institute\TimetableController;
 use App\Http\Controllers\Web\DashboardController;
 use App\Http\Controllers\Web\LoginController;
 use App\Http\Controllers\Web\LogoutController;
+use App\Http\Controllers\Web\NotificationController;
 use App\Http\Controllers\Web\PlanController;
 use App\Http\Controllers\Web\SettingsController;
 use App\Http\Controllers\Web\SubscriptionInvoiceController;
@@ -23,6 +24,13 @@ Route::post('logout', [LogoutController::class, 'store'])->name('logout.web');
 // Dashboard (Inertia)
 Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard')->middleware('auth');
 Route::get('settings', [SettingsController::class, 'index'])->name('settings')->middleware('auth');
+
+// Super Admin notification tray
+Route::middleware('auth')->group(function () {
+    Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::patch('notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
+    Route::patch('notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
+});
 Route::resource('institute', SuperAdminInstituteController::class)
     ->only(['index', 'store', 'update', 'destroy'])
     ->middleware('auth');
@@ -34,6 +42,9 @@ Route::get('subscription-invoices', [SubscriptionInvoiceController::class, 'inde
     ->middleware('auth');
 Route::put('subscription-invoices/{invoice}/verify', [SuperAdminInstituteController::class, 'verifyInvoice'])
     ->name('subscription-invoices.verify')
+    ->middleware('auth');
+Route::post('subscription-invoices/{invoice}/reject', [SuperAdminInstituteController::class, 'reject'])
+    ->name('subscription-invoices.reject')
     ->middleware('auth');
 
 // Fallback for "public/storage/..." URLs. When the web server's document

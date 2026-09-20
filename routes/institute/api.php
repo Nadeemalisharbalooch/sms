@@ -8,6 +8,7 @@ use App\Http\Controllers\Institute\ClassSubjectController;
 use App\Http\Controllers\Institute\DashboardController;
 use App\Http\Controllers\Institute\FeeController;
 use App\Http\Controllers\Institute\InstituteController;
+use App\Http\Controllers\Institute\NotificationController;
 use App\Http\Controllers\Institute\PermissionController;
 use App\Http\Controllers\Institute\RoleController;
 use App\Http\Controllers\Institute\RoomTeacherController;
@@ -47,6 +48,21 @@ $instituteResources = function () {
 
 Route::prefix('institutes')->group($instituteResources);
 Route::prefix('institute')->group($instituteResources);
+
+// Dashboard notification tray. Auth only (no subscription requirement) so a
+// blocked/expired user can still read their alerts.
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::get('institutes/notifications', [NotificationController::class, 'index'])
+        ->name('institutes.notifications.index');
+    Route::get('institutes/notifications/unread-count', [NotificationController::class, 'unreadCount'])
+        ->name('institutes.notifications.unread-count');
+    Route::patch('institutes/notifications/read-all', [NotificationController::class, 'markAllAsRead'])
+        ->name('institutes.notifications.read-all');
+    Route::patch('institutes/notifications/{id}/read', [NotificationController::class, 'markAsRead'])
+        ->name('institutes.notifications.read');
+    Route::delete('institutes/notifications/{id}', [NotificationController::class, 'destroy'])
+        ->name('institutes.notifications.destroy');
+});
 
 Route::middleware(['auth:sanctum', 'active.institute.subscription'])->group(function () {
     Route::patch('institutes/academic-sessions/{academic_session}/activate', [AcademicSessionController::class, 'activate'])

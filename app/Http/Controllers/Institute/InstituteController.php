@@ -8,7 +8,9 @@ use App\Http\Requests\Institute\StoreInstituteRequest;
 use App\Http\Requests\Institute\UpdateInstituteRequest;
 use App\Http\Resources\Institute\InstituteResource;
 use App\Models\Institute;
+use App\Models\InstituteSubscription;
 use App\Models\InstituteUser;
+use App\Models\Plan;
 use App\Models\User;
 use App\Services\ResponseService;
 use Illuminate\Http\Request;
@@ -106,6 +108,8 @@ public function store(StoreInstituteRequest $request)
             ]);
         }
 
+        $this->assignTrialSubscription($institute);
+
         return $institute;
     });
 
@@ -114,6 +118,34 @@ public function store(StoreInstituteRequest $request)
         'Institute created successfully'
     );
 }
+
+    /**
+     * Auto-assign the trial subscription to a newly created institute so the
+     * owner can start using the app immediately.
+     */
+    private function assignTrialSubscription(Institute $institute): void
+    {
+        $plan = Plan::query()
+            ->where('is_active', true)
+            ->whereRaw('LOWER(TRIM(name)) = ?', ['trial'])
+            ->first();
+
+        if (! $plan || InstituteSubscription::query()->where('institute_id', $institute->id)->exists()) {
+            return;
+        }
+
+        $startsAt = now();
+
+        InstituteSubscription::create([
+            'institute_id' => $institute->id,
+            'plan_id' => $plan->id,
+            'status' => 'trialing',
+            'blocked' => false,
+            'starts_at' => $startsAt,
+            'ends_at' => $startsAt->copy()->addDays($plan->trial_days),
+            'approved_at' => null,
+        ]);
+    }
 
     /**
      * Set one of the authenticated user's institutes as active.

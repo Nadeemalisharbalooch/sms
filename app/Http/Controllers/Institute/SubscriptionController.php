@@ -3,12 +3,17 @@
 namespace App\Http\Controllers\Institute;
 
 use App\Http\Controllers\Controller;
+use App\Models\AcademicClass;
 use App\Models\Institute;
 use App\Models\InstituteSubscription;
 use App\Models\InstituteUser;
 use App\Models\Plan;
 use App\Models\Student;
 use App\Models\SubscriptionInvoice;
+use App\Models\User;
+use App\Notifications\InvoiceGeneratedNotification;
+use App\Notifications\PaymentProofSubmittedNotification;
+use App\Services\NotificationService;
 use App\Services\ResponseService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -166,6 +171,25 @@ class SubscriptionController extends Controller
             ], 'Trial started. No invoice is required.');
         }
 
+        $usage = [
+            'students' => Student::query()->where('institute_id', $instituteId)->count(),
+            'teachers' => User::query()
+                ->whereHas('roles', fn ($query) => $query
+                    ->where('roles.institute_id', $instituteId)
+                    ->where('roles.name', 'Teacher'))
+                ->count(),
+            'classes' => AcademicClass::query()->where('institute_id', $instituteId)->count(),
+        ];
+
+        $exceeded = $plan->usageLimitsExceeded($usage);
+
+        if (! empty($exceeded)) {
+            return ResponseService::error(
+                'Unable to switch to the '.$plan->name.' plan: your current usage '.implode(', ', $exceeded).' exceeds the plan limit. Please choose a higher plan.',
+                422,
+            );
+        }
+
         $invoice = DB::transaction(function () use ($instituteId, $plan) {
             $invoice = SubscriptionInvoice::create([
                 'institute_id' => $instituteId,
@@ -178,6 +202,11 @@ class SubscriptionController extends Controller
 
             return $invoice->fresh();
         });
+
+        NotificationService::toInstituteOwner(
+            $instituteId,
+            new InvoiceGeneratedNotification($invoice)
+        );
 
         return ResponseService::success(
             ['invoice' => $this->invoicePayload($invoice)],
@@ -228,6 +257,7 @@ class SubscriptionController extends Controller
                 'payment_screenshot' => $paymentScreenshot,
                 'status' => 'verification_pending',
                 'payment_submitted_at' => now(),
+                'rejection_reason' => null,
             ]);
 
             SubscriptionInvoice::query()
@@ -238,6 +268,10 @@ class SubscriptionController extends Controller
 
             return $invoice->fresh();
         });
+
+        NotificationService::toSuperAdmins(
+            new PaymentProofSubmittedNotification($invoice->load('institute'))
+        );
 
         return ResponseService::success(
             $this->invoicePayload($invoice->fresh(), true),

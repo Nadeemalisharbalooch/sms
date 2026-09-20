@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    // Optional dedicated inbox for super-admin alerts (e.g. payment proof
+    // submissions). When empty, super admins only get dashboard notifications.
+    'super_admin_email' => env('SUPER_ADMIN_EMAIL'),
+
 ];

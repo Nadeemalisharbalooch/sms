@@ -12,6 +12,7 @@ use App\Models\InstituteUser;
 use App\Models\Subject;
 use App\Models\SubjectAllocation;
 use App\Models\User;
+use App\Services\NotificationService;
 use App\Services\ResponseService;
 use Illuminate\Http\Request;
 
@@ -77,6 +78,8 @@ class SubjectTeacherController extends Controller
         $created = \Illuminate\Database\Eloquent\Collection::make($created)
             ->load(['session', 'academicClass', 'section', 'subject', 'teacher']);
 
+        $this->notifyTeachersAssigned($created, $instituteId);
+
         return ResponseService::success(
             SubjectAllocationResource::collection($created),
             'Subject teachers assigned successfully',
@@ -105,6 +108,34 @@ class SubjectTeacherController extends Controller
         $subjectAllocation->delete();
 
         return ResponseService::success(null, 'Subject allocation removed successfully');
+    }
+
+    private function notifyTeachersAssigned($created, int $instituteId): void
+    {
+        $created
+            ->groupBy('teacher_user_id')
+            ->each(function ($records, $teacherId) use ($instituteId) {
+                $teacher = $records->first()?->teacher;
+
+                if ($teacher === null) {
+                    return;
+                }
+
+                $className = $records->first()?->academicClass?->name;
+                $sectionName = $records->first()?->section?->name;
+                $subjectNames = $records->pluck('subject.name')->filter()->unique()->implode(', ');
+
+                $details = trim(implode(' ', array_filter([
+                    $className,
+                    $sectionName ? "Section {$sectionName}" : null,
+                ])));
+
+                NotificationService::teacherAssigned(
+                    $teacher,
+                    $instituteId,
+                    $subjectNames ? "{$subjectNames} in {$details}" : $details
+                );
+            });
     }
 
     private function allocationError(array $validated, int $instituteId): ?\Illuminate\Http\JsonResponse

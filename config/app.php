@@ -17,6 +17,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Staff Login URL
+    |--------------------------------------------------------------------------
+    |
+    | Where new staff members are sent to sign in. Used in the "Welcome" email
+    | for newly created teachers/receptionists. Defaults to the app URL.
+    |
+    */
+
+    'staff_login_url' => env('STAFF_LOGIN_URL'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------
     |

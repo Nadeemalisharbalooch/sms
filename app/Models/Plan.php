@@ -21,4 +21,22 @@ class Plan extends Model
     {
         return $this->hasMany(InstituteSubscription::class);
     }
+
+    /**
+     * Returns the usage metric keys (e.g. ['students']) whose current value
+     * exceeds the plan's limit. Plans with a null limit are unlimited.
+     */
+    public function usageLimitsExceeded(array $usage): array
+    {
+        $exceeded = [];
+
+        foreach (['student_limit' => 'students', 'teacher_limit' => 'teachers', 'class_limit' => 'classes'] as $limit => $metric) {
+            $limitValue = $this->{$limit};
+            if ($limitValue !== null && ((int) ($usage[$metric] ?? 0)) > (int) $limitValue) {
+                $exceeded[] = $metric;
+            }
+        }
+
+        return $exceeded;
+    }
 }

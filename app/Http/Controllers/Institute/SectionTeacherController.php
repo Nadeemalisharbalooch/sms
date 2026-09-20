@@ -10,6 +10,7 @@ use App\Models\AcademicSection;
 use App\Models\InstituteUser;
 use App\Models\SectionTeacher;
 use App\Models\User;
+use App\Services\NotificationService;
 use App\Services\ResponseService;
 use Illuminate\Http\Request;
 
@@ -59,7 +60,9 @@ class SectionTeacherController extends Controller
             ]);
         }
 
-        $assignment = SectionTeacher::create($validated)->load(['section', 'teacher']);
+        $assignment = SectionTeacher::create($validated)->load(['section.academicClass', 'teacher']);
+
+        $this->notifyTeacherAssigned($assignment, $instituteId);
 
         return ResponseService::success(
             new SectionTeacherResource($assignment),
@@ -117,6 +120,24 @@ class SectionTeacherController extends Controller
         $sectionTeacher->delete();
 
         return ResponseService::success(null, 'Teacher removed from section successfully');
+    }
+
+    private function notifyTeacherAssigned(SectionTeacher $assignment, int $instituteId): void
+    {
+        $teacher = $assignment->teacher;
+        $section = $assignment->section;
+        $className = $section?->academicClass?->name;
+
+        if ($teacher === null) {
+            return;
+        }
+
+        $details = trim(implode(' ', array_filter([
+            $className,
+            $section ? "Section {$section->name}" : null,
+        ])));
+
+        NotificationService::teacherAssigned($teacher, $instituteId, $details ?: 'a class/section');
     }
 
     private function assignmentError(array $validated, int $instituteId): ?\Illuminate\Http\JsonResponse

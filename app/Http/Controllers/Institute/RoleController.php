@@ -7,6 +7,7 @@ use App\Http\Requests\Institute\StoreRoleRequest;
 use App\Http\Requests\Institute\UpdateRoleRequest;
 use App\Http\Resources\Institute\RoleResource;
 use App\Models\InstituteUser;
+use App\Services\NotificationService;
 use App\Services\ResponseService;
 use Illuminate\Http\Request;
 use Spatie\Permission\Models\Role;
@@ -168,6 +169,11 @@ public function store(StoreRoleRequest $request)
                 ->all();
 
             $role->syncPermissions($permissionNames);
+        }
+
+        $instituteId = $this->activeInstituteId($request);
+        if ($instituteId !== null) {
+            NotificationService::permissionsUpdated($instituteId, $role->id, $role->name);
         }
 
         return ResponseService::success(

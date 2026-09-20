@@ -11,6 +11,7 @@ use App\Models\AcademicSession;
 use App\Models\InstituteUser;
 use App\Models\RoomTeacher;
 use App\Models\User;
+use App\Services\NotificationService;
 use App\Services\ResponseService;
 use Illuminate\Http\Request;
 
@@ -63,10 +64,20 @@ class RoomTeacherController extends Controller
             [
                 'teacher_user_id' => $validated['teacher_id'],
             ]
-        );
+        )->load(['session', 'academicClass', 'section', 'teacher']);
+
+        $teacher = $roomTeacher->teacher;
+        if ($teacher !== null) {
+            $details = trim(implode(' ', array_filter([
+                $roomTeacher->academicClass?->name,
+                $roomTeacher->section ? "Section {$roomTeacher->section->name}" : null,
+            ])));
+
+            NotificationService::teacherAssigned($teacher, $instituteId, $details ? "Homeroom teacher for {$details}" : 'a class');
+        }
 
         return ResponseService::success(
-            new RoomTeacherResource($roomTeacher->load(['session', 'academicClass', 'section', 'teacher'])),
+            new RoomTeacherResource($roomTeacher),
             'Room teacher assigned successfully',
             201
         );

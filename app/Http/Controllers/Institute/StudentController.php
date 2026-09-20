@@ -15,6 +15,7 @@ use App\Models\AcademicSession;
 use App\Models\Enrollment;
 use App\Models\InstituteUser;
 use App\Models\Student;
+use App\Services\NotificationService;
 use App\Services\ResponseService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -113,6 +114,17 @@ class StudentController extends Controller
 
             return $student;
         });
+
+        $className = AcademicClass::query()->whereKey($validated['class_id'])->value('name');
+        $sectionName = AcademicSection::query()->whereKey($validated['section_id'] ?? 0)->value('name');
+        $classSection = trim(implode(' ', array_filter([$className, $sectionName ? "Section {$sectionName}" : null])));
+
+        NotificationService::studentAdmitted(
+            $instituteId,
+            trim($student->first_name.' '.$student->last_name),
+            $classSection ?: 'a class',
+            $request->user()->id
+        );
 
         return ResponseService::success(
             new StudentResource($student->load('enrollments')),

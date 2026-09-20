@@ -9,6 +9,7 @@ use App\Http\Requests\Institute\UserUpdateRequest;
 use App\Http\Resources\Institute\UserResource;
 use App\Models\InstituteUser;
 use App\Models\User;
+use App\Services\NotificationService;
 use App\Services\ResponseService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -193,6 +194,8 @@ public function store(UserStoreRequest $request)
 
             return $user;
         });
+
+        NotificationService::staffCreated($user, $validated['password'], $instituteId);
 
         return ResponseService::success(
             new UserResource($user->load(['roles' => fn ($query) => $query->where('roles.institute_id', $instituteId)])),

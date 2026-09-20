@@ -18,6 +18,7 @@ class EnsureActiveInstituteSubscription
      */
     private const EXEMPT_ROUTES = [
         'institutes.current',
+        'institutes.store',
         'institutes.plans.index',
         'institutes.subscription.current',
         'institutes.subscription.upgrade',
