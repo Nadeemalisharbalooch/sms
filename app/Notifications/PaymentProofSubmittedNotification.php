@@ -38,8 +38,8 @@ class PaymentProofSubmittedNotification extends BaseNotification
         // Super admins are notified through the dashboard tray. If a dedicated
         // super admin inbox is configured, the email channel is added as well.
         return config('services.super_admin_email')
-            ? ['database', 'mail']
-            : ['database'];
+            ? ['database', 'broadcast', 'mail']
+            : ['database', 'broadcast'];
     }
 
     public function actionText(): string

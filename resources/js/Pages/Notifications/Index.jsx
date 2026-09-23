@@ -1,10 +1,12 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 import AdminLayout from '../../Layouts/AdminLayout';
+import useRealtimeNotifications from '../../hooks/useRealtimeNotifications';
 
-export default function NotificationsIndex({ user, notifications, filters, unread_count }) {
+export default function NotificationsIndex({ user, notifications, filters }) {
     const [search, setSearch] = useState(filters.search || '');
     const [status, setStatus] = useState(filters.status || '');
+    const { items: liveItems } = useRealtimeNotifications(user);
     const applyFilters = (event) => {
         event.preventDefault();
         router.get(
@@ -14,7 +16,8 @@ export default function NotificationsIndex({ user, notifications, filters, unrea
         );
     };
 
-    const unreadCount = notifications.data.filter((item) => !item.read_at).length;
+    const allItems = [...liveItems, ...notifications.data];
+    const unreadCount = allItems.filter((item) => !item.read_at).length;
 
     return (
         <AdminLayout user={user} title="Notifications" onLogout={() => router.post(route('logout.web'))}>
@@ -24,7 +27,7 @@ export default function NotificationsIndex({ user, notifications, filters, unrea
                     <div>
                         <h2 className="font-semibold text-gray-900 dark:text-white">Notification Tray</h2>
                         <p className="mt-1 text-sm text-gray-500">
-                            {unread_count > 0 ? `${unread_count} unread notification${unread_count === 1 ? '' : 's'}.` : 'You are all caught up.'}
+                            {unreadCount > 0 ? `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}.` : 'You are all caught up.'}
                         </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -49,9 +52,9 @@ export default function NotificationsIndex({ user, notifications, filters, unrea
                     </div>
                 </div>
 
-                {notifications.data.length ? (
+                {allItems.length ? (
                     <ul className="divide-y divide-gray-100 dark:divide-gray-700">
-                        {notifications.data.map((notification) => {
+                        {allItems.map((notification) => {
                             const data = notification.data || {};
                             const unread = !notification.read_at;
                             return (

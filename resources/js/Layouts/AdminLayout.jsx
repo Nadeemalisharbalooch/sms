@@ -1,4 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
+import useRealtimeNotifications from '../hooks/useRealtimeNotifications';
 
 const navigation = [
     { label: 'Dashboard', route: 'dashboard' },
@@ -13,9 +14,21 @@ export default function AdminLayout({ children, user, title, onLogout }) {
     const { props } = usePage();
     const flash = props.flash || {};
     const unreadCount = (props.notifications && props.notifications.unread_count) || 0;
+    const { unread: liveUnread, toasts } = useRealtimeNotifications(user);
+    const badgeCount = unreadCount + liveUnread;
 
     return (
         <div className="min-h-screen bg-gray-100 dark:bg-gray-900">
+            {toasts.map((toast) => (
+                <div
+                    key={`${toast.id}-${toast.created_at}`}
+                    role="status"
+                    className="fixed right-4 top-4 z-50 w-80 rounded-lg border border-gray-200 bg-white p-4 shadow-lg dark:border-gray-700 dark:bg-gray-800"
+                >
+                    <p className="font-medium text-gray-900 dark:text-white">{toast.title}</p>
+                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{toast.body}</p>
+                </div>
+            ))}
             <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col bg-gray-900 text-white md:flex">
                 <div className="border-b border-gray-700 px-6 py-5">
                     <p className="text-lg font-semibold">SMS Admin</p>
@@ -57,9 +70,9 @@ export default function AdminLayout({ children, user, title, onLogout }) {
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="h-6 w-6">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
                         </svg>
-                        {unreadCount > 0 && (
+                        {badgeCount > 0 && (
                             <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-xs font-semibold text-white">
-                                {unreadCount > 99 ? '99+' : unreadCount}
+                                {badgeCount > 99 ? '99+' : badgeCount}
                             </span>
                         )}
                     </Link>

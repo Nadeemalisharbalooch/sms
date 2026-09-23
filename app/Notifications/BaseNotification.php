@@ -53,8 +53,17 @@ abstract class BaseNotification extends Notification implements ShouldQueue
     public function via(object $notifiable): array
     {
         return $this->priority() === 'high'
-            ? ['database', 'mail']
-            : ['database'];
+            ? ['database', 'broadcast', 'mail']
+            : ['database', 'broadcast'];
+    }
+
+    /**
+     * Data pushed to the user's private channel so the tray can update in
+     * real time without polling. Mirrors the persisted database payload.
+     */
+    public function toBroadcast(object $notifiable): array
+    {
+        return $this->toDatabase($notifiable);
     }
 
     /**
@@ -63,6 +72,14 @@ abstract class BaseNotification extends Notification implements ShouldQueue
     public function typeName(): string
     {
         return Str::snake(Str::replaceLast('Notification', '', class_basename($this)));
+    }
+
+    /**
+     * Keep the realtime payload's "type" matching the persisted value.
+     */
+    public function broadcastType(): string
+    {
+        return $this->typeName();
     }
 
     /**
