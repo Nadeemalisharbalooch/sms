@@ -46,7 +46,7 @@ class UserController extends Controller
      */
     public function currentPermissions(Request $request)
     {
-      
+
         $instituteId = InstituteUser::query()
             ->where('user_id', $request->user()->id)
             ->where('is_active', true)
@@ -93,7 +93,7 @@ class UserController extends Controller
      */
     public function index(Request $request)
     {
-        
+
         $instituteId = $this->activeInstituteId($request);
 
         if ($instituteId === null) {
@@ -160,62 +160,67 @@ class UserController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-public function store(UserStoreRequest $request)
-{
-    
-    $validated = $request->validated();
-    $userData = $this->userData($validated);
-    $userData['is_accept_terms'] = true;
-    $instituteId = $this->activeInstituteId($request);
+    public function store(UserStoreRequest $request)
+    {
 
-    if ($instituteId === null) {
-        return ResponseService::error('No active institute is associated with this user', 422);
+        $validated = $request->validated();
+        $userData = $this->userData($validated);
+        $userData['is_accept_terms'] = true;
+        $instituteId = $this->activeInstituteId($request);
+
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        if (! $this->isInstituteAdminOrOwner($request, $instituteId)) {
+            return ResponseService::error('Only the institute owner or an Admin can manage users', 403);
+        }
+
+        try {
+            $user = \DB::transaction(function () use ($userData, $validated, $instituteId) {
+                $user = User::create($userData);
+
+                InstituteUser::create([
+                    'institute_id' => $instituteId,
+                    'user_id' => $user->id,
+                    'is_active' => true,
+                ]);
+
+                $roles = $this->rolesForActiveInstitute($this->extractRoleIds($validated), $instituteId);
+
+                if ($roles->count() !== count($this->extractRoleIds($validated))) {
+                    throw new \Exception('Invalid role IDs provided');
+                }
+
+                if ($roles->isNotEmpty()) {
+                    $user->syncRoles($roles);
+                }
+
+                return $user;
+            });
+
+            NotificationService::staffCreated($user, $validated['password'], $instituteId);
+
+            return ResponseService::success(
+                new UserResource($user->load(['roles' => fn ($query) => $query->where('roles.institute_id', $instituteId)])),
+                'User created successfully',
+                201
+            );
+        } catch (\Exception $e) {
+            return ResponseService::error('Failed to create user: '.$e->getMessage(), 422);
+        }
     }
 
-    try {
-        $user = \DB::transaction(function () use ($userData, $validated, $instituteId) {
-            $user = User::create($userData);
+    private function extractRoleIds(array $validated): array
+    {
+        if (array_key_exists('role_ids', $validated)) {
+            return $this->normalizeRoleIds($validated['role_ids']);
+        } elseif (array_key_exists('role', $validated)) {
+            return $this->normalizeRoleIds($validated['role']);
+        }
 
-            InstituteUser::create([
-                'institute_id' => $instituteId,
-                'user_id' => $user->id,
-                'is_active' => true,
-            ]);
-
-            $roles = $this->rolesForActiveInstitute($this->extractRoleIds($validated), $instituteId);
-
-            if ($roles->count() !== count($this->extractRoleIds($validated))) {
-                throw new \Exception('Invalid role IDs provided');
-            }
-
-            if ($roles->isNotEmpty()) {
-                $user->syncRoles($roles);
-            }
-
-            return $user;
-        });
-
-        NotificationService::staffCreated($user, $validated['password'], $instituteId);
-
-        return ResponseService::success(
-            new UserResource($user->load(['roles' => fn ($query) => $query->where('roles.institute_id', $instituteId)])),
-            'User created successfully',
-            201
-        );
-    } catch (\Exception $e) {
-        return ResponseService::error('Failed to create user: ' . $e->getMessage(), 422);
+        return [];
     }
-}
-
-private function extractRoleIds(array $validated): array
-{
-    if (array_key_exists('role_ids', $validated)) {
-        return $this->normalizeRoleIds($validated['role_ids']);
-    } elseif (array_key_exists('role', $validated)) {
-        return $this->normalizeRoleIds($validated['role']);
-    }
-    return [];
-}
 
     /**
      * Display the specified resource.
@@ -250,6 +255,10 @@ private function extractRoleIds(array $validated): array
             return ResponseService::error('No active institute is associated with this user', 422);
         }
 
+        if (! $this->isInstituteAdminOrOwner($request, $instituteId)) {
+            return ResponseService::error('Only the institute owner or an Admin can manage users', 403);
+        }
+
         $validated = $request->validated();
         $user = $this->findInstituteUser($id, $instituteId);
         $userData = $this->userData($validated);
@@ -259,7 +268,7 @@ private function extractRoleIds(array $validated): array
         }
 
         \DB::transaction(function () use ($user, $userData, $validated, $instituteId) {
-            if (!empty($userData)) {
+            if (! empty($userData)) {
                 $user->update($userData);
             }
 
@@ -312,6 +321,10 @@ private function extractRoleIds(array $validated): array
             return ResponseService::error('No active institute is associated with this user', 422);
         }
 
+        if (! $this->isInstituteAdminOrOwner($request, $instituteId)) {
+            return ResponseService::error('Only the institute owner or an Admin can manage users', 403);
+        }
+
         $user = $this->findInstituteUser($id, $instituteId);
         $user->delete();
 
@@ -326,6 +339,10 @@ private function extractRoleIds(array $validated): array
         $instituteId = $this->activeInstituteId($request);
         if ($instituteId === null) {
             return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        if (! $this->isInstituteAdminOrOwner($request, $instituteId)) {
+            return ResponseService::error('Only the institute owner or an Admin can manage users', 403);
         }
 
         $user = $this->findInstituteUser($id, $instituteId, true, true);
@@ -348,6 +365,10 @@ private function extractRoleIds(array $validated): array
             return ResponseService::error('No active institute is associated with this user', 422);
         }
 
+        if (! $this->isInstituteAdminOrOwner($request, $instituteId)) {
+            return ResponseService::error('Only the institute owner or an Admin can manage users', 403);
+        }
+
         $user = $this->findInstituteUser($id, $instituteId, true, true);
 
         if ((int) $user->id === Auth::id()) {
@@ -361,7 +382,7 @@ private function extractRoleIds(array $validated): array
 
     private function userData(array $validated): array
     {
-        unset($validated['role_ids'], $validated['role']);
+        unset($validated['role_ids'], $validated['role'], $validated['is_admin']);
 
         return $validated;
     }
@@ -401,6 +422,24 @@ private function extractRoleIds(array $validated): array
             ->value('institute_id');
 
         return $instituteId === null ? null : (int) $instituteId;
+    }
+
+    private function isInstituteAdminOrOwner(Request $request, int $instituteId): bool
+    {
+        $isOwner = InstituteUser::query()
+            ->where('user_id', $request->user()->id)
+            ->where('institute_id', $instituteId)
+            ->where('is_owner', true)
+            ->exists();
+
+        if ($isOwner) {
+            return true;
+        }
+
+        return $request->user()->roles()
+            ->where('roles.institute_id', $instituteId)
+            ->where('roles.name', 'Admin')
+            ->exists();
     }
 
     private function findInstituteUser(string $id, int $instituteId, bool $withTrashed = false, bool $onlyTrashed = false): User

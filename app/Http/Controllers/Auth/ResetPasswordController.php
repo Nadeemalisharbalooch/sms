@@ -12,8 +12,7 @@ class ResetPasswordController extends Controller
 {
     public function __construct(
         private OtpService $otpService,
-    ) {
-    }
+    ) {}
 
     public function __invoke(ResetPasswordRequest $request)
     {
@@ -34,6 +33,10 @@ class ResetPasswordController extends Controller
 
         // Update password
         $user->update(['password' => $validated['password']]);
+
+        // Revoke all existing tokens so previously issued sessions cannot
+        // keep using the account with the old (potentially leaked) password.
+        $user->tokens()->delete();
 
         return ResponseService::success(null, 'Password has been reset successfully. You can now login.');
     }

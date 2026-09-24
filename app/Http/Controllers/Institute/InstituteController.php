@@ -14,6 +14,7 @@ use App\Models\Plan;
 use App\Models\User;
 use App\Services\ResponseService;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -47,17 +48,20 @@ class InstituteController extends Controller
     }
 
     /**
-     * Display a listing of the resource.
+     * Display a listing of the authenticated user's institutes only.
      */
-  public function index()
-{
-    $institutes = Institute::latest()->paginate();
+    public function index(Request $request)
+    {
+        $institutes = Institute::query()
+            ->whereHas('instituteUsers', fn ($query) => $query->where('user_id', $request->user()->id))
+            ->latest()
+            ->paginate();
 
-    return ResponseService::success(
-        InstituteResource::collection($institutes),
-        'Institutes fetched successfully'
-    );
-}
+        return ResponseService::success(
+            InstituteResource::collection($institutes),
+            'Institutes fetched successfully'
+        );
+    }
 
     /**
      * Show the form for creating a new resource.
@@ -70,54 +74,51 @@ class InstituteController extends Controller
     /**
      * Store a newly created resource in storage.
      */
+    public function store(StoreInstituteRequest $request)
+    {
+        $user = Auth::user();
 
+        $institute = DB::transaction(function () use ($request, $user) {
 
+            $data = $request->validated();
+            $data = $this->handleFileUploads($data);
 
-public function store(StoreInstituteRequest $request)
-{
-    $user = Auth::user();
+            $institute = Institute::create($data);
 
-    $institute = DB::transaction(function () use ($request, $user) {
-
-        $data = $request->validated();
-        $data = $this->handleFileUploads($data);
-
-        $institute = Institute::create($data);
-
-        $user->update([
-            'is_institute' => true,
-        ]);
-
-        InstituteUser::query()
-            ->where('user_id', $user->id)
-            ->where('is_active', true)
-            ->update(['is_active' => false]);
-
-        InstituteUser::create([
-            'institute_id' => $institute->id,
-            'user_id'      => $user->id,
-            'is_owner'     => true,
-            'is_active'    => true,
-        ]);
-
-        foreach (['Admin', 'Teacher', 'Student'] as $roleName) {
-            Role::query()->create([
-                'institute_id' => $institute->id,
-                'name' => $roleName,
-                'guard_name' => 'sanctum',
+            $user->update([
+                'is_institute' => true,
             ]);
-        }
 
-        $this->assignTrialSubscription($institute);
+            InstituteUser::query()
+                ->where('user_id', $user->id)
+                ->where('is_active', true)
+                ->update(['is_active' => false]);
 
-        return $institute;
-    });
+            InstituteUser::create([
+                'institute_id' => $institute->id,
+                'user_id' => $user->id,
+                'is_owner' => true,
+                'is_active' => true,
+            ]);
 
-    return ResponseService::success(
-        new InstituteResource($institute),
-        'Institute created successfully'
-    );
-}
+            foreach (['Admin', 'Teacher', 'Student'] as $roleName) {
+                Role::query()->create([
+                    'institute_id' => $institute->id,
+                    'name' => $roleName,
+                    'guard_name' => 'sanctum',
+                ]);
+            }
+
+            $this->assignTrialSubscription($institute);
+
+            return $institute;
+        });
+
+        return ResponseService::success(
+            new InstituteResource($institute),
+            'Institute created successfully'
+        );
+    }
 
     /**
      * Auto-assign the trial subscription to a newly created institute so the
@@ -179,15 +180,19 @@ public function store(StoreInstituteRequest $request)
     }
 
     /**
-     * Display the specified resource.
+     * Display the specified resource (members only).
      */
-   public function show(Institute $institute)
-{
-    return ResponseService::success(
-        new InstituteResource($institute),
-        'Institute fetched successfully'
-    );
-}
+    public function show(Request $request, Institute $institute)
+    {
+        if (! $this->isInstituteMember($request, $institute)) {
+            return ResponseService::notFound('Institute not found');
+        }
+
+        return ResponseService::success(
+            new InstituteResource($institute),
+            'Institute fetched successfully'
+        );
+    }
 
     /**
      * Show the form for editing the specified resource.
@@ -198,23 +203,27 @@ public function store(StoreInstituteRequest $request)
     }
 
     /**
-     * Update the specified resource in storage.
+     * Update the specified resource (owner only).
      */
-   public function update(UpdateInstituteRequest $request, Institute $institute)
-{
-    $data = $request->validated();
-    $data = $this->handleFileUploads($data, $institute);
+    public function update(UpdateInstituteRequest $request, Institute $institute)
+    {
+        if (! $this->isInstituteOwner($request, $institute)) {
+            return ResponseService::error('Only the institute owner can update the institute', 403);
+        }
 
-    $institute->update($data);
+        $data = $request->validated();
+        $data = $this->handleFileUploads($data, $institute);
 
-    return ResponseService::success(
-        new InstituteResource($institute->fresh()),
-        'Institute updated successfully'
-    );
-}
+        $institute->update($data);
+
+        return ResponseService::success(
+            new InstituteResource($institute->fresh()),
+            'Institute updated successfully'
+        );
+    }
 
     /**
-     * Edit the currently active institute for the authenticated user.
+     * Edit the currently active institute for the authenticated user (owner only).
      */
     public function editCurrentInstitute(EditCurrentInstituteRequest $request)
     {
@@ -230,6 +239,10 @@ public function store(StoreInstituteRequest $request)
         }
 
         $institute = Institute::findOrFail($instituteId);
+
+        if (! $this->isInstituteOwner($request, $institute)) {
+            return ResponseService::error('Only the institute owner can update the institute', 403);
+        }
 
         $data = $request->validated();
         $data = $this->handleFileUploads($data, $institute);
@@ -248,7 +261,7 @@ public function store(StoreInstituteRequest $request)
     protected function handleFileUploads(array $data, ?Institute $institute = null): array
     {
         foreach (['logo', 'favicon'] as $field) {
-            if (isset($data[$field]) && $data[$field] instanceof \Illuminate\Http\UploadedFile) {
+            if (isset($data[$field]) && $data[$field] instanceof UploadedFile) {
                 // Delete old file if updating
                 if ($institute && $institute->{$field}) {
                     Storage::disk('public')->delete($institute->{$field});
@@ -262,15 +275,36 @@ public function store(StoreInstituteRequest $request)
     }
 
     /**
-     * Remove the specified resource from storage.
+     * Remove the specified resource from storage (owner only).
      */
-   public function destroy(Institute $institute)
-{
-    $institute->delete();
+    public function destroy(Request $request, Institute $institute)
+    {
+        if (! $this->isInstituteOwner($request, $institute)) {
+            return ResponseService::error('Only the institute owner can delete the institute', 403);
+        }
 
-    return ResponseService::success(
-        null,
-        'Institute deleted successfully'
-    );
-}
+        $institute->delete();
+
+        return ResponseService::success(
+            null,
+            'Institute deleted successfully'
+        );
+    }
+
+    private function isInstituteMember(Request $request, Institute $institute): bool
+    {
+        return InstituteUser::query()
+            ->where('user_id', $request->user()->id)
+            ->where('institute_id', $institute->id)
+            ->exists();
+    }
+
+    private function isInstituteOwner(Request $request, Institute $institute): bool
+    {
+        return InstituteUser::query()
+            ->where('user_id', $request->user()->id)
+            ->where('institute_id', $institute->id)
+            ->where('is_owner', true)
+            ->exists();
+    }
 }

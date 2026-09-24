@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Institute;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Institute\CollectFeePaymentRequest;
 use App\Http\Requests\Institute\DeleteVouchersRequest;
+use App\Http\Requests\Institute\FeeRecordsRequest;
 use App\Http\Requests\Institute\GenerateVouchersRequest;
 use App\Http\Requests\Institute\StoreFeeCategoryRequest;
 use App\Http\Requests\Institute\StoreFeeStructureRequest;
@@ -431,164 +432,164 @@ class FeeController extends Controller
             }
         }
 
-            $counts = DB::transaction(function () use ($instituteId, $sessionId, $classId, $billingMonth, $dueDate, $feeCategoryIds, $studentIds) {
-                // Serialize voucher generation within a session. Without this lock,
-                // simultaneous requests can both decide that a voucher is missing
-                // and then violate the unique session/student/month constraint.
-                AcademicSession::query()
-                    ->whereKey($sessionId)
-                    ->lockForUpdate()
-                    ->firstOrFail();
+        $counts = DB::transaction(function () use ($instituteId, $sessionId, $classId, $billingMonth, $dueDate, $feeCategoryIds, $studentIds) {
+            // Serialize voucher generation within a session. Without this lock,
+            // simultaneous requests can both decide that a voucher is missing
+            // and then violate the unique session/student/month constraint.
+            AcademicSession::query()
+                ->whereKey($sessionId)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-                // The batch_id column is a UUID, so use a database-compatible
-                // identifier instead of a prefixed string.
-                $batchId = (string) Str::uuid();
+            // The batch_id column is a UUID, so use a database-compatible
+            // identifier instead of a prefixed string.
+            $batchId = (string) Str::uuid();
 
-                $students = Student::query()
-                    ->where('institute_id', $instituteId)
-                    ->when(! empty($studentIds), fn ($query) => $query->whereIn('id', $studentIds))
-                    ->whereHas('enrollments', function ($query) use ($sessionId, $classId) {
-                        $query->where('session_id', $sessionId)
-                            ->when($classId !== null, fn ($classQuery) => $classQuery->where('class_id', $classId));
-                    })
-                    ->with(['enrollments' => function ($query) use ($sessionId, $classId) {
-                        $query->where('session_id', $sessionId)
-                            ->when($classId !== null, fn ($classQuery) => $classQuery->where('class_id', $classId));
-                    }])
-                    ->get();
+            $students = Student::query()
+                ->where('institute_id', $instituteId)
+                ->when(! empty($studentIds), fn ($query) => $query->whereIn('id', $studentIds))
+                ->whereHas('enrollments', function ($query) use ($sessionId, $classId) {
+                    $query->where('session_id', $sessionId)
+                        ->when($classId !== null, fn ($classQuery) => $classQuery->where('class_id', $classId));
+                })
+                ->with(['enrollments' => function ($query) use ($sessionId, $classId) {
+                    $query->where('session_id', $sessionId)
+                        ->when($classId !== null, fn ($classQuery) => $classQuery->where('class_id', $classId));
+                }])
+                ->get();
 
-                $existingVoucherStudentIds = FeeVoucher::query()
-                    ->where('session_id', $sessionId)
-                    ->where('billing_month', $billingMonth)
-                    ->pluck('student_id');
+            $existingVoucherStudentIds = FeeVoucher::query()
+                ->where('session_id', $sessionId)
+                ->where('billing_month', $billingMonth)
+                ->pluck('student_id');
 
-                $classIds = $students->pluck('enrollments')->flatten()->pluck('class_id')->unique()->filter();
-                $studentIds = $students->pluck('id');
+            $classIds = $students->pluck('enrollments')->flatten()->pluck('class_id')->unique()->filter();
+            $studentIds = $students->pluck('id');
 
-                $classFeesQuery = FeeStructure::query()
-                    ->where('session_id', $sessionId)
-                    ->whereIn('class_id', $classIds)
-                    ->with('feeCategory');
+            $classFeesQuery = FeeStructure::query()
+                ->where('session_id', $sessionId)
+                ->whereIn('class_id', $classIds)
+                ->with('feeCategory');
 
-                if (! empty($feeCategoryIds)) {
-                    $classFeesQuery->whereIn('fee_category_id', $feeCategoryIds);
+            if (! empty($feeCategoryIds)) {
+                $classFeesQuery->whereIn('fee_category_id', $feeCategoryIds);
+            }
+
+            $classFees = $classFeesQuery
+                ->get()
+                ->groupBy('class_id');
+
+            $studentFeesQuery = StudentFeeAssignment::query()
+                ->where('session_id', $sessionId)
+                ->whereIn('student_id', $studentIds)
+                ->with('feeCategory');
+
+            if (! empty($feeCategoryIds)) {
+                $studentFeesQuery->whereIn('fee_category_id', $feeCategoryIds);
+            }
+
+            $studentFees = $studentFeesQuery
+                ->get()
+                ->groupBy('student_id');
+
+            // Yearly and one-time class fees are charged only once per student
+            // within an academic session. Voucher items retain the fee name, which
+            // is unique per institute through fee_categories.
+            $alreadyChargedNonMonthlyFees = FeeVoucher::query()
+                ->where('session_id', $sessionId)
+                ->whereIn('student_id', $studentIds)
+                ->with('items:id,fee_voucher_id,fee_name')
+                ->get()
+                ->groupBy('student_id')
+                ->map(fn ($vouchers) => $vouchers
+                    ->flatMap(fn (FeeVoucher $voucher) => $voucher->items->pluck('fee_name'))
+                    ->unique()
+                    ->values());
+
+            $generatedCount = 0;
+            $skippedCount = 0;
+
+            foreach ($students as $student) {
+                if ($existingVoucherStudentIds->contains($student->id)) {
+                    $skippedCount++;
+
+                    continue;
                 }
 
-                $classFees = $classFeesQuery
-                    ->get()
-                    ->groupBy('class_id');
+                $enrollment = $student->enrollments->first();
+                $classIdForStudent = $enrollment?->class_id;
 
-                $studentFeesQuery = StudentFeeAssignment::query()
-                    ->where('session_id', $sessionId)
-                    ->whereIn('student_id', $studentIds)
-                    ->with('feeCategory');
+                $lineItems = collect();
 
-                if (! empty($feeCategoryIds)) {
-                    $studentFeesQuery->whereIn('fee_category_id', $feeCategoryIds);
-                }
+                // Sum of standard Class fee_structures
+                $chargedNonMonthlyFees = $alreadyChargedNonMonthlyFees->get($student->id, collect());
 
-                $studentFees = $studentFeesQuery
-                    ->get()
-                    ->groupBy('student_id');
+                collect($classFees->get($classIdForStudent, collect()))
+                    ->each(function (FeeStructure $structure) use ($lineItems, $chargedNonMonthlyFees) {
+                        $feeName = $structure->feeCategory?->name ?? 'Fee';
 
-                // Yearly and one-time class fees are charged only once per student
-                // within an academic session. Voucher items retain the fee name, which
-                // is unique per institute through fee_categories.
-                $alreadyChargedNonMonthlyFees = FeeVoucher::query()
-                    ->where('session_id', $sessionId)
-                    ->whereIn('student_id', $studentIds)
-                    ->with('items:id,fee_voucher_id,fee_name')
-                    ->get()
-                    ->groupBy('student_id')
-                    ->map(fn ($vouchers) => $vouchers
-                        ->flatMap(fn (FeeVoucher $voucher) => $voucher->items->pluck('fee_name'))
-                        ->unique()
-                        ->values());
+                        if ($structure->recurrence !== 'monthly' && $chargedNonMonthlyFees->contains($feeName)) {
+                            return;
+                        }
 
-                $generatedCount = 0;
-                $skippedCount = 0;
-
-                foreach ($students as $student) {
-                    if ($existingVoucherStudentIds->contains($student->id)) {
-                        $skippedCount++;
-
-                        continue;
-                    }
-
-                    $enrollment = $student->enrollments->first();
-                    $classIdForStudent = $enrollment?->class_id;
-
-                    $lineItems = collect();
-
-                    // Sum of standard Class fee_structures
-                    $chargedNonMonthlyFees = $alreadyChargedNonMonthlyFees->get($student->id, collect());
-
-                    collect($classFees->get($classIdForStudent, collect()))
-                        ->each(function (FeeStructure $structure) use ($lineItems, $chargedNonMonthlyFees) {
-                            $feeName = $structure->feeCategory?->name ?? 'Fee';
-
-                            if ($structure->recurrence !== 'monthly' && $chargedNonMonthlyFees->contains($feeName)) {
-                                return;
-                            }
-
-                            $lineItems->push([
-                                'fee_name' => $feeName,
-                                'amount' => (float) $structure->amount,
-                            ]);
-                        });
-
-                    // Sum of optional Student fee_assignments
-                    collect($studentFees->get($student->id, collect()))
-                        ->each(function (StudentFeeAssignment $assignment) use ($lineItems) {
-                            $lineItems->push([
-                                'fee_name' => $assignment->feeCategory?->name ?? 'Fee',
-                                'amount' => (float) $assignment->amount,
-                            ]);
-                        });
-
-                    // If specific fee categories were requested and this student has no matching fees, skip
-                    if (! empty($feeCategoryIds) && $lineItems->isEmpty()) {
-                        $skippedCount++;
-
-                        continue;
-                    }
-
-                    // A student can have a class fee and an individual assignment
-                    // for the same category. Store one line per fee name so a
-                    // voucher never contains duplicate-looking items.
-                    $lineItems = $lineItems
-                        ->groupBy('fee_name')
-                        ->map(fn ($items, $feeName) => [
+                        $lineItems->push([
                             'fee_name' => $feeName,
-                            'amount' => round((float) $items->sum('amount'), 2),
-                        ])
-                        ->values();
+                            'amount' => (float) $structure->amount,
+                        ]);
+                    });
 
-                    // A full discount can produce a zero-value voucher, but it must
-                    // still be generated so the billing run remains complete.
-                    $totalAmount = max(0, (float) $lineItems->sum('amount'));
+                // Sum of optional Student fee_assignments
+                collect($studentFees->get($student->id, collect()))
+                    ->each(function (StudentFeeAssignment $assignment) use ($lineItems) {
+                        $lineItems->push([
+                            'fee_name' => $assignment->feeCategory?->name ?? 'Fee',
+                            'amount' => (float) $assignment->amount,
+                        ]);
+                    });
 
-                    $voucher = FeeVoucher::create([
-                        'institute_id' => $instituteId,
-                        'session_id' => $sessionId,
-                        'student_id' => $student->id,
-                        'batch_id' => $batchId,
-                        'billing_month' => $billingMonth,
-                        'due_date' => $dueDate,
-                        'total_amount' => $totalAmount,
-                        'paid_amount' => 0,
-                        'status' => $totalAmount === 0.0 ? 'paid' : 'unpaid',
-                    ]);
+                // If specific fee categories were requested and this student has no matching fees, skip
+                if (! empty($feeCategoryIds) && $lineItems->isEmpty()) {
+                    $skippedCount++;
 
-                    foreach ($lineItems as $item) {
-                        $voucher->items()->create($item);
-                    }
-
-                    $generatedCount++;
+                    continue;
                 }
 
-                return ['generated_count' => $generatedCount, 'skipped_count' => $skippedCount, 'batch_id' => $batchId];
-            });
+                // A student can have a class fee and an individual assignment
+                // for the same category. Store one line per fee name so a
+                // voucher never contains duplicate-looking items.
+                $lineItems = $lineItems
+                    ->groupBy('fee_name')
+                    ->map(fn ($items, $feeName) => [
+                        'fee_name' => $feeName,
+                        'amount' => round((float) $items->sum('amount'), 2),
+                    ])
+                    ->values();
+
+                // A full discount can produce a zero-value voucher, but it must
+                // still be generated so the billing run remains complete.
+                $totalAmount = max(0, (float) $lineItems->sum('amount'));
+
+                $voucher = FeeVoucher::create([
+                    'institute_id' => $instituteId,
+                    'session_id' => $sessionId,
+                    'student_id' => $student->id,
+                    'batch_id' => $batchId,
+                    'billing_month' => $billingMonth,
+                    'due_date' => $dueDate,
+                    'total_amount' => $totalAmount,
+                    'paid_amount' => 0,
+                    'status' => $totalAmount === 0.0 ? 'paid' : 'unpaid',
+                ]);
+
+                foreach ($lineItems as $item) {
+                    $voucher->items()->create($item);
+                }
+
+                $generatedCount++;
+            }
+
+            return ['generated_count' => $generatedCount, 'skipped_count' => $skippedCount, 'batch_id' => $batchId];
+        });
 
         return ResponseService::success(
             $counts,
@@ -863,6 +864,7 @@ class FeeController extends Controller
 
                 if ($hasPayments && ! $force) {
                     $skippedPaidCount++;
+
                     continue;
                 }
 
@@ -957,6 +959,7 @@ class FeeController extends Controller
 
                 if ($hasPayments && ! $force) {
                     $skippedPaidCount++;
+
                     continue;
                 }
 
@@ -1652,8 +1655,209 @@ class FeeController extends Controller
     }
 
     // =====================================================================
-    // Helpers
+    // API 11: Fee Records (filtered list — no pagination)
     // =====================================================================
+
+    public function records(FeeRecordsRequest $request): JsonResponse
+    {
+        $instituteId = $this->activeInstituteId($request);
+
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $validated = $request->validated();
+
+        $error = $this->recordsScopeError($instituteId, $validated);
+
+        if ($error !== null) {
+            return $error;
+        }
+
+        $sessionId = $validated['session_id'] ?? $this->activeSessionId($instituteId);
+        $status = ($validated['status'] ?? null) === 'partially_paid' ? 'partial' : ($validated['status'] ?? null);
+        $search = trim((string) ($validated['search'] ?? '')) !== '' ? $validated['search'] : null;
+
+        $query = FeeVoucher::query()
+            ->where('institute_id', $instituteId)
+            ->with([
+                'session:id,name',
+                'student:id,institute_id,first_name,last_name,guardian_name,guardian_phone',
+                'student.enrollments' => fn ($enrollmentQuery) => $enrollmentQuery
+                    ->when($sessionId !== null, fn ($enrollmentQuery) => $enrollmentQuery->where('session_id', $sessionId))
+                    ->with(['academicClass:id,name', 'section:id,name']),
+                'items',
+                'payments' => fn ($paymentQuery) => $paymentQuery->with('collectedBy:id,name'),
+            ])
+            ->when($sessionId !== null, fn ($query) => $query->where('session_id', $sessionId))
+            ->when($validated['student_id'] ?? null, fn ($query, $studentId) => $query->where('student_id', $studentId))
+            ->when($status !== null, fn ($query) => $query->where('status', $status))
+            ->when($validated['billing_month'] ?? null, fn ($query, $billingMonth) => $query->where('billing_month', $billingMonth))
+            ->when(($validated['class_id'] ?? null) !== null || ($validated['section_id'] ?? null) !== null, fn ($query) => $query->whereHas('student.enrollments', function ($enrollmentQuery) use ($validated, $sessionId) {
+                $enrollmentQuery->when($sessionId !== null, fn ($enrollmentQuery) => $enrollmentQuery->where('session_id', $sessionId));
+
+                if (($validated['class_id'] ?? null) !== null) {
+                    $enrollmentQuery->where('class_id', $validated['class_id']);
+                }
+
+                if (($validated['section_id'] ?? null) !== null) {
+                    $enrollmentQuery->where('section_id', $validated['section_id']);
+                }
+            }))
+            ->when($search !== null, fn ($query) => $query->whereHas('student', function ($studentQuery) use ($search, $sessionId) {
+                $studentQuery->where(function ($studentQuery) use ($search, $sessionId) {
+                    $studentQuery->where('first_name', 'like', '%'.$search.'%')
+                        ->orWhere('last_name', 'like', '%'.$search.'%')
+                        ->orWhereHas('enrollments', function ($enrollmentQuery) use ($search, $sessionId) {
+                            $enrollmentQuery->when($sessionId !== null, fn ($enrollmentQuery) => $enrollmentQuery->where('session_id', $sessionId))
+                                ->where('roll_number', 'like', '%'.$search.'%');
+                        });
+                });
+            }));
+
+        if (array_key_exists('due_date_from', $validated) || array_key_exists('due_date_to', $validated)) {
+            if (($validated['due_date_from'] ?? null) !== null) {
+                $query->whereDate('due_date', '>=', $validated['due_date_from']);
+            }
+
+            if (($validated['due_date_to'] ?? null) !== null) {
+                $query->whereDate('due_date', '<=', $validated['due_date_to']);
+            }
+        }
+
+        $summary = (clone $query)
+            ->selectRaw('
+                COUNT(*) as total_vouchers,
+                COALESCE(SUM(total_amount), 0) as total_amount,
+                COALESCE(SUM(paid_amount), 0) as total_paid,
+                COALESCE(SUM(total_amount - paid_amount), 0) as total_due
+            ')
+            ->first();
+
+        $statusCounts = (clone $query)
+            ->selectRaw('status, COUNT(*) as total')
+            ->groupBy('status')
+            ->get()
+            ->pluck('total', 'status');
+
+        $records = $query
+            ->orderByDesc('billing_month')
+            ->orderByDesc('id')
+            ->get();
+
+        $records->transform(function (FeeVoucher $voucher) {
+            $student = $voucher->student;
+            $enrollment = $student?->enrollments?->first();
+
+            return [
+                'voucher_id' => $voucher->id,
+                'batch_id' => $voucher->batch_id,
+                'billing_month' => $voucher->billing_month,
+                'due_date' => $voucher->due_date?->toDateString(),
+                'total_amount' => round((float) $voucher->total_amount, 2),
+                'paid_amount' => round((float) $voucher->paid_amount, 2),
+                'balance_due' => round($voucher->balance_due, 2),
+                'status' => $voucher->status,
+                'session' => $voucher->session ? [
+                    'id' => $voucher->session->id,
+                    'name' => $voucher->session->name,
+                ] : null,
+                'student' => $student ? [
+                    'id' => $student->id,
+                    'first_name' => $student->first_name,
+                    'last_name' => $student->last_name,
+                    'full_name' => trim(($student->first_name ?? '').' '.($student->last_name ?? '')),
+                    'roll_number' => $enrollment?->roll_number,
+                    'class' => $enrollment?->academicClass ? [
+                        'id' => $enrollment->academicClass->id,
+                        'name' => $enrollment->academicClass->name,
+                    ] : null,
+                    'section' => $enrollment?->section ? [
+                        'id' => $enrollment->section->id,
+                        'name' => $enrollment->section->name,
+                    ] : null,
+                    'guardian_name' => $student->guardian_name,
+                    'guardian_phone' => $student->guardian_phone,
+                ] : null,
+                'items' => $voucher->items
+                    ->groupBy('fee_name')
+                    ->map(fn ($items, $feeName) => [
+                        'fee_name' => $feeName,
+                        'amount' => round((float) $items->sum('amount'), 2),
+                    ])
+                    ->values(),
+                'payments' => $voucher->payments->map(fn (FeePayment $payment) => [
+                    'id' => $payment->id,
+                    'amount_paid' => round((float) $payment->amount_paid, 2),
+                    'payment_date' => $payment->payment_date?->toDateString(),
+                    'payment_method' => $payment->payment_method,
+                    'collected_by' => $payment->collectedBy ? [
+                        'id' => $payment->collectedBy->id,
+                        'name' => $payment->collectedBy->name,
+                    ] : null,
+                ])->values(),
+            ];
+        });
+
+        return ResponseService::success([
+            'institute' => ['id' => $instituteId],
+            'session' => $sessionId === null ? null : AcademicSession::query()->find($sessionId, ['id', 'name']),
+            'filters' => [
+                'session_id' => $sessionId,
+                'class_id' => $validated['class_id'] ?? null,
+                'section_id' => $validated['section_id'] ?? null,
+                'student_id' => $validated['student_id'] ?? null,
+                'status' => $validated['status'] ?? null,
+                'billing_month' => $validated['billing_month'] ?? null,
+                'due_date_from' => $validated['due_date_from'] ?? null,
+                'due_date_to' => $validated['due_date_to'] ?? null,
+                'search' => $search,
+            ],
+            'summary' => [
+                'total_vouchers' => (int) ($summary->total_vouchers ?? 0),
+                'total_amount' => round((float) ($summary->total_amount ?? 0), 2),
+                'total_paid' => round((float) ($summary->total_paid ?? 0), 2),
+                'total_due' => round((float) ($summary->total_due ?? 0), 2),
+                'status_counts' => [
+                    'unpaid_count' => (int) $statusCounts->get('unpaid', 0),
+                    'partial_count' => (int) $statusCounts->get('partial', 0),
+                    'paid_count' => (int) $statusCounts->get('paid', 0),
+                    'overdue_count' => (int) $statusCounts->get('overdue', 0),
+                    'cancelled_count' => (int) $statusCounts->get('cancelled', 0),
+                ],
+            ],
+            'records' => $records->values(),
+        ], 'Fee records retrieved successfully');
+    }
+
+    private function recordsScopeError(int $instituteId, array $validated): ?JsonResponse
+    {
+        if (isset($validated['session_id']) && ! AcademicSession::query()->whereKey($validated['session_id'])->where('institute_id', $instituteId)->exists()) {
+            return ResponseService::error('Validation failed', 422, ['session_id' => ['The selected session does not belong to the active institute.']]);
+        }
+
+        if (isset($validated['class_id']) && ! AcademicClass::query()->whereKey($validated['class_id'])->where('institute_id', $instituteId)->exists()) {
+            return ResponseService::error('Validation failed', 422, ['class_id' => ['The selected class does not belong to the active institute.']]);
+        }
+
+        if (isset($validated['section_id'])) {
+            $section = AcademicSection::query()->find($validated['section_id']);
+
+            if ($section === null || ($validated['class_id'] ?? null) !== null && $section->class_id !== (int) $validated['class_id']) {
+                return ResponseService::error('Validation failed', 422, ['section_id' => ['The selected section does not belong to the selected class.']]);
+            }
+
+            if (($validated['class_id'] ?? null) === null && ! AcademicClass::query()->whereKey($section->class_id)->where('institute_id', $instituteId)->exists()) {
+                return ResponseService::error('Validation failed', 422, ['section_id' => ['The selected section does not belong to the active institute.']]);
+            }
+        }
+
+        if (isset($validated['student_id']) && ! Student::query()->whereKey($validated['student_id'])->where('institute_id', $instituteId)->exists()) {
+            return ResponseService::error('Validation failed', 422, ['student_id' => ['The selected student does not belong to the active institute.']]);
+        }
+
+        return null;
+    }
 
     private function activeInstituteId(Request $request): ?int
     {

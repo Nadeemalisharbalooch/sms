@@ -21,31 +21,30 @@ Route::get('login', [LoginController::class, 'show'])->name('login.page');
 Route::post('login', [LoginController::class, 'store'])->name('login.store');
 Route::post('logout', [LogoutController::class, 'store'])->name('logout.web');
 
-// Dashboard (Inertia)
-Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard')->middleware('auth');
-Route::get('settings', [SettingsController::class, 'index'])->name('settings')->middleware('auth');
+// Super Admin area (Inertia). Every route below requires an authenticated
+// global admin (users.is_admin = true); regular institute users are blocked.
+Route::middleware(['auth', 'admin'])->group(function () {
+    // Dashboard (Inertia)
+    Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('settings', [SettingsController::class, 'index'])->name('settings');
 
-// Super Admin notification tray
-Route::middleware('auth')->group(function () {
+    // Super Admin notification tray
     Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::patch('notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::patch('notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
+
+    Route::resource('institute', SuperAdminInstituteController::class)
+        ->only(['index', 'store', 'update', 'destroy']);
+    Route::resource('plans', PlanController::class)
+        ->only(['index', 'store', 'update', 'destroy']);
+
+    Route::get('subscription-invoices', [SubscriptionInvoiceController::class, 'index'])
+        ->name('subscription-invoices.index');
+    Route::put('subscription-invoices/{invoice}/verify', [SuperAdminInstituteController::class, 'verifyInvoice'])
+        ->name('subscription-invoices.verify');
+    Route::post('subscription-invoices/{invoice}/reject', [SuperAdminInstituteController::class, 'reject'])
+        ->name('subscription-invoices.reject');
 });
-Route::resource('institute', SuperAdminInstituteController::class)
-    ->only(['index', 'store', 'update', 'destroy'])
-    ->middleware('auth');
-Route::resource('plans', PlanController::class)
-    ->only(['index', 'store', 'update', 'destroy'])
-    ->middleware('auth');
-Route::get('subscription-invoices', [SubscriptionInvoiceController::class, 'index'])
-    ->name('subscription-invoices.index')
-    ->middleware('auth');
-Route::put('subscription-invoices/{invoice}/verify', [SuperAdminInstituteController::class, 'verifyInvoice'])
-    ->name('subscription-invoices.verify')
-    ->middleware('auth');
-Route::post('subscription-invoices/{invoice}/reject', [SuperAdminInstituteController::class, 'reject'])
-    ->name('subscription-invoices.reject')
-    ->middleware('auth');
 
 // Fallback for "public/storage/..." URLs. When the web server's document
 // root is the Laravel "public/" directory, a static file does not exist at

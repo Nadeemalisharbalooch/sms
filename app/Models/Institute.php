@@ -3,13 +3,13 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasOneThrough;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 use Illuminate\Support\Str;
 
 class Institute extends Model
 {
-
     protected $fillable = [
         'user_id',
         'name',
@@ -22,7 +22,7 @@ class Institute extends Model
         'is_active',
     ];
 
-     protected static function booted(): void
+    protected static function booted(): void
     {
         static::creating(function ($institute) {
             if (empty($institute->public_id)) {
@@ -31,9 +31,14 @@ class Institute extends Model
         });
     }
 
- public function getRouteKeyName(): string
+    public function getRouteKeyName(): string
     {
         return 'public_id';
+    }
+
+    public function instituteUsers(): HasMany
+    {
+        return $this->hasMany(InstituteUser::class);
     }
 
     public function owner(): HasOneThrough

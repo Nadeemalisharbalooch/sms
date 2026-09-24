@@ -5,11 +5,19 @@ namespace App\Services\Otp;
 use App\Mail\OtpMail;
 use App\Models\EmailOtp;
 use App\Models\User;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Str;
 
 class OtpService
 {
+    /**
+     * Number of failed OTP attempts allowed before the verification is locked
+     * for the user, per OTP type, for the sliding window below.
+     */
+    private const MAX_ATTEMPTS = 5;
+
+    private const ATTEMPT_WINDOW_SECONDS = 900; // 15 minutes
+
     /**
      * Generate a 6-digit OTP.
      */
@@ -28,6 +36,9 @@ class OtpService
             ->where('type', $type)
             ->where('is_used', false)
             ->update(['is_used' => true]);
+
+        // Reset the failed-attempt counter for the freshly issued OTP.
+        Cache::forget($this->attemptsKey($user, $type));
 
         $otp = $this->generateOtp();
 
@@ -56,6 +67,13 @@ class OtpService
      */
     public function verifyOtp(User $user, string $otp, string $type = 'email_verification'): bool
     {
+        $attemptsKey = $this->attemptsKey($user, $type);
+        $attempts = (int) Cache::get($attemptsKey, 0);
+
+        if ($attempts >= self::MAX_ATTEMPTS) {
+            return false;
+        }
+
         $emailOtp = $user->emailOtps()
             ->where('type', $type)
             ->where('otp', $otp)
@@ -63,17 +81,23 @@ class OtpService
             ->latest()
             ->first();
 
-        if (! $emailOtp) {
-            return false;
-        }
+        if (! $emailOtp || ! $emailOtp->isValid()) {
+            Cache::put($attemptsKey, $attempts + 1, self::ATTEMPT_WINDOW_SECONDS);
 
-        if (! $emailOtp->isValid()) {
             return false;
         }
 
         // Mark OTP as used
         $emailOtp->update(['is_used' => true]);
 
+        // A successful verification clears the failed-attempt counter.
+        Cache::forget($attemptsKey);
+
         return true;
+    }
+
+    private function attemptsKey(User $user, string $type): string
+    {
+        return "otp_attempts:{$user->id}:{$type}";
     }
 }

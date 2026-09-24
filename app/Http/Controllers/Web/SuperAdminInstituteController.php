@@ -51,7 +51,7 @@ class SuperAdminInstituteController extends Controller
         // Create associated user for this institute
         $password = $request->input('user_password', 'password');
         $user = User::create([
-            'name' => $request->input('user_name', $institute->name . ' Admin'),
+            'name' => $request->input('user_name', $institute->name.' Admin'),
             'email' => $request->input('user_email', $institute->email),
             'password' => Hash::make($password),
             'phone' => $request->input('user_phone', $institute->phone),
@@ -118,25 +118,29 @@ class SuperAdminInstituteController extends Controller
 
     public function verifyInvoice(Request $request, SubscriptionInvoice $invoice): RedirectResponse
     {
-        if ($invoice->status !== 'verification_pending') {
-            return back()->with('error', 'Only submitted manual payments can be verified.');
-        }
-
         $plan = $invoice->plan;
 
-        if ($plan && ! empty($plan->usageLimitsExceeded([
-            'students' => Student::query()->where('institute_id', $invoice->institute_id)->count(),
-            'teachers' => User::query()
-                ->whereHas('roles', fn ($query) => $query
-                    ->where('roles.institute_id', $invoice->institute_id)
-                    ->where('roles.name', 'Teacher'))
-                ->count(),
-            'classes' => AcademicClass::query()->where('institute_id', $invoice->institute_id)->count(),
-        ]))) {
-            return back()->with('error', "Cannot verify the {$plan->name} payment: the institute's current usage exceeds the plan limit. Ask them to choose a higher plan.");
-        }
+        // The status re-check happens inside the transaction while the invoice
+        // row is locked, so two concurrent clicks cannot verify it twice.
+        $error = DB::transaction(function () use ($invoice, $request, $plan): ?string {
+            $invoice = SubscriptionInvoice::query()->lockForUpdate()->findOrFail($invoice->id);
 
-        DB::transaction(function () use ($invoice, $request): void {
+            if ($invoice->status !== 'verification_pending') {
+                return 'Only submitted manual payments can be verified.';
+            }
+
+            if ($plan && ! empty($plan->usageLimitsExceeded([
+                'students' => Student::query()->where('institute_id', $invoice->institute_id)->count(),
+                'teachers' => User::query()
+                    ->whereHas('roles', fn ($query) => $query
+                        ->where('roles.institute_id', $invoice->institute_id)
+                        ->where('roles.name', 'Teacher'))
+                    ->count(),
+                'classes' => AcademicClass::query()->where('institute_id', $invoice->institute_id)->count(),
+            ]))) {
+                return "Cannot verify the {$plan->name} payment: the institute's current usage exceeds the plan limit. Ask them to choose a higher plan.";
+            }
+
             $invoice->update([
                 'status' => 'paid',
                 'paid_at' => now(),
@@ -162,7 +166,13 @@ class SuperAdminInstituteController extends Controller
                     : $endsAt->addMonth(),
                 'approved_at' => $now,
             ])->save();
+
+            return null;
         });
+
+        if ($error !== null) {
+            return back()->with('error', $error);
+        }
 
         NotificationService::toInstituteOwner(
             $invoice->institute_id,
@@ -174,21 +184,29 @@ class SuperAdminInstituteController extends Controller
 
     public function reject(Request $request, SubscriptionInvoice $invoice): RedirectResponse
     {
-        if ($invoice->status !== 'verification_pending') {
-            return back()->with('error', 'Only submitted manual payments can be rejected.');
-        }
-
         $reason = $request->validate([
             'reason' => ['nullable', 'string', 'max:1000'],
         ])['reason'] ?? null;
 
-        DB::transaction(function () use ($invoice, $reason, $request): void {
+        $rejected = DB::transaction(function () use ($invoice, $reason, $request): bool {
+            $invoice = SubscriptionInvoice::query()->lockForUpdate()->findOrFail($invoice->id);
+
+            if ($invoice->status !== 'verification_pending') {
+                return false;
+            }
+
             $invoice->update([
                 'status' => 'open',
                 'rejection_reason' => $reason,
                 'verified_by_user_id' => $request->user()->id,
             ]);
+
+            return true;
         });
+
+        if (! $rejected) {
+            return back()->with('error', 'Only submitted manual payments can be rejected.');
+        }
 
         NotificationService::toInstituteOwner(
             $invoice->institute_id,
@@ -231,5 +249,4 @@ class SuperAdminInstituteController extends Controller
             'user_password' => ['nullable', 'string', 'min:8'],
         ]);
     }
-
 }

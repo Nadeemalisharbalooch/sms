@@ -11,7 +11,11 @@ class Enrollment extends Model
 
     protected function casts(): array
     {
-        return ['student_id' => 'integer', 'session_id' => 'integer', 'class_id' => 'integer', 'section_id' => 'integer'];
+        return [
+            'student_id' => 'integer', 'session_id' => 'integer',
+            'class_id' => 'integer', 'section_id' => 'integer',
+            'roll_number' => 'integer',
+        ];
     }
 
     public function student(): BelongsTo

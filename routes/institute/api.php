@@ -94,7 +94,7 @@ Route::middleware(['auth:sanctum', 'active.institute.subscription'])->group(func
         ->name('institutes.attendance.roster');
     Route::get('institutes/attendance', [AttendanceController::class, 'index'])
         ->name('institutes.attendance.index');
-    Route::get('institutes/attendance/records', [AttendanceController::class, 'index'])
+    Route::get('institutes/attendance/records', [AttendanceController::class, 'records'])
         ->name('institutes.attendance.records');
     Route::post('institutes/attendance', [AttendanceController::class, 'store'])
         ->name('institutes.attendance.store');
@@ -210,6 +210,9 @@ Route::middleware(['auth:sanctum', 'active.institute.subscription'])->group(func
     // API 5: Fetch Student Ledger (Cashier Search)
     Route::get('institutes/fees/ledger', [FeeController::class, 'ledger'])
         ->name('institutes.fees.ledger');
+
+    Route::get('institutes/fees/records', [FeeController::class, 'records'])
+        ->name('institutes.fees.records');
 
     // API 5A: Fetch one student's voucher ledger and summary.
     Route::get('institutes/fees/student-ledger', [FeeController::class, 'studentLedger'])

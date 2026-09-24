@@ -140,6 +140,36 @@ class SubscriptionController extends Controller
         }
 
         if (strtolower(trim($plan->name)) === 'trial') {
+            $trialAlreadyUsed = InstituteSubscription::query()
+                ->where('institute_id', $instituteId)
+                ->where('plan_id', $plan->id)
+                ->exists();
+
+            if ($trialAlreadyUsed) {
+                return ResponseService::error('The trial plan can only be used once per institute.', 422);
+            }
+
+            $hasActivePaidPlan = InstituteSubscription::query()
+                ->where('institute_id', $instituteId)
+                ->where('status', 'active')
+                ->where(fn ($query) => $query
+                    ->whereNull('ends_at')
+                    ->orWhere('ends_at', '>', now()))
+                ->exists();
+
+            if ($hasActivePaidPlan) {
+                return ResponseService::error('You already have an active paid plan. The trial plan cannot be started.', 422);
+            }
+
+            $hasPendingInvoice = SubscriptionInvoice::query()
+                ->where('institute_id', $instituteId)
+                ->whereIn('status', ['open', 'verification_pending'])
+                ->exists();
+
+            if ($hasPendingInvoice) {
+                return ResponseService::error('You have a pending invoice. Please complete or cancel it before switching to the trial plan.', 422);
+            }
+
             $subscription = DB::transaction(function () use ($instituteId, $plan) {
                 $subscription = InstituteSubscription::query()
                     ->where('institute_id', $instituteId)

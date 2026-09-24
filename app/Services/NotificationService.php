@@ -15,6 +15,7 @@ use App\Notifications\StudentAdmittedNotification;
 use App\Notifications\TeacherAllocatedNotification;
 use App\Notifications\TimetablePublishedNotification;
 use Illuminate\Notifications\Notification;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification as NotificationFacade;
 
@@ -28,7 +29,9 @@ class NotificationService
         $owner = Institute::query()->find($instituteId)?->owner;
 
         if ($owner?->email) {
-            NotificationFacade::send($owner, $notification);
+            foreach (Arr::wrap($notification) as $item) {
+                NotificationFacade::send($owner, $item);
+            }
         }
     }
 
@@ -41,7 +44,9 @@ class NotificationService
 
         foreach ($recipients as $user) {
             if ($user instanceof User && $user->email) {
-                NotificationFacade::send($user, $notification);
+                foreach (Arr::wrap($notification) as $item) {
+                    NotificationFacade::send($user, $item);
+                }
             }
         }
     }
@@ -58,7 +63,9 @@ class NotificationService
             ->get();
 
         if ($admins->isNotEmpty()) {
-            NotificationFacade::send($admins, $notification);
+            foreach (Arr::wrap($notification) as $item) {
+                NotificationFacade::send($admins, $item);
+            }
         }
 
         $address = config('services.super_admin_email');
@@ -77,10 +84,14 @@ class NotificationService
         $instituteName = Institute::query()->whereKey($instituteId)->value('name') ?? 'your institute';
         $loginUrl = config('app.staff_login_url') ?: url('/');
 
-        NotificationFacade::send($staff, [
+        $notifications = [
             new StaffCreatedNotification($staff, $instituteName),
             new StaffWelcomeNotification($staff, $password, $loginUrl),
-        ]);
+        ];
+
+        foreach ($notifications as $item) {
+            NotificationFacade::send($staff, $item);
+        }
     }
 
     /**
