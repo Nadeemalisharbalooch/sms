@@ -25,8 +25,13 @@ export default function useRealtimeNotifications(user) {
             return undefined;
         }
 
+        const echo = getEcho();
+        if (! echo) {
+            return undefined;
+        }
+
         const name = channelName(user.id);
-        const channel = getEcho().private(name);
+        const channel = echo.private(name);
         channelRef.current = channel;
 
         channel.listen(`.${NOTIFICATION_EVENT}`, (payload) => {
@@ -50,7 +55,7 @@ export default function useRealtimeNotifications(user) {
         });
 
         return () => {
-            getEcho().leaveChannel(name);
+            echo.leaveChannel(name);
             channelRef.current = null;
         };
     }, [user?.id]);

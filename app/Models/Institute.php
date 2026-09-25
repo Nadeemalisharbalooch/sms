@@ -22,6 +22,37 @@ class Institute extends Model
         'is_active',
     ];
 
+    protected $appends = [
+        'logo_url',
+        'favicon_url',
+    ];
+
+    public function getLogoUrlAttribute(): ?string
+    {
+        if (! $this->logo) {
+            return null;
+        }
+
+        if (str_starts_with($this->logo, 'http://') || str_starts_with($this->logo, 'https://')) {
+            return $this->logo;
+        }
+
+        return url('storage/'.ltrim($this->logo, '/'));
+    }
+
+    public function getFaviconUrlAttribute(): ?string
+    {
+        if (! $this->favicon) {
+            return null;
+        }
+
+        if (str_starts_with($this->favicon, 'http://') || str_starts_with($this->favicon, 'https://')) {
+            return $this->favicon;
+        }
+
+        return url('storage/'.ltrim($this->favicon, '/'));
+    }
+
     protected static function booted(): void
     {
         static::creating(function ($institute) {

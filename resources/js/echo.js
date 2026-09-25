@@ -6,16 +6,36 @@ window.Pusher = Pusher;
 let echo = null;
 
 export function getEcho() {
+    const key = import.meta.env.VITE_REVERB_APP_KEY;
+    const isEnabled = import.meta.env.VITE_REVERB_ENABLED !== 'false';
+
+    if (! key || ! isEnabled) {
+        return null;
+    }
+
     if (! echo) {
-        echo = new Echo({
-            broadcaster: 'reverb',
-            key: import.meta.env.VITE_REVERB_APP_KEY,
-            wsHost: import.meta.env.VITE_REVERB_HOST || window.location.hostname,
-            wsPort: import.meta.env.VITE_REVERB_PORT ?? 8080,
-            wssPort: import.meta.env.VITE_REVERB_HTTPS_PORT ?? 443,
-            forceTLS: (import.meta.env.VITE_REVERB_SCHEME ?? 'http') === 'https',
-            enabledTransports: ['ws', 'wss'],
-        });
+        try {
+            echo = new Echo({
+                broadcaster: 'reverb',
+                key: key,
+                wsHost: import.meta.env.VITE_REVERB_HOST || window.location.hostname,
+                wsPort: import.meta.env.VITE_REVERB_PORT ?? 8080,
+                wssPort: import.meta.env.VITE_REVERB_HTTPS_PORT ?? 443,
+                forceTLS: (import.meta.env.VITE_REVERB_SCHEME ?? 'http') === 'https',
+                enabledTransports: ['ws', 'wss'],
+            });
+
+            if (echo.connector?.pusher?.connection) {
+                echo.connector.pusher.connection.bind('error', (error) => {
+                    if (import.meta.env.DEV) {
+                        console.warn('Reverb WebSocket connection notice:', error);
+                    }
+                });
+            }
+        } catch (e) {
+            console.warn('Failed to initialize Laravel Echo / Reverb:', e);
+            echo = null;
+        }
     }
 
     return echo;

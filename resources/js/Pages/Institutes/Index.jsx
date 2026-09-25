@@ -28,11 +28,20 @@ export default function InstitutesIndex({ user, institutes, plans }) {
         event.preventDefault();
 
         if (editing) {
-            put(route('institute.update', editing.public_id), { onSuccess: closeForm });
+            router.post(route('institute.update', editing.public_id), {
+                _method: 'put',
+                ...data,
+            }, {
+                onSuccess: closeForm,
+                forceFormData: true,
+            });
             return;
         }
 
-        post(route('institute.store'), { onSuccess: closeForm });
+        post(route('institute.store'), {
+            onSuccess: closeForm,
+            forceFormData: true,
+        });
     }
 
     function startEdit(institute) {
@@ -88,13 +97,25 @@ export default function InstitutesIndex({ user, institutes, plans }) {
                                     <tr><th className="px-6 py-3">Logo</th><th className="px-6 py-3">Name</th><th className="px-6 py-3">Email</th><th className="px-6 py-3">Plan</th><th className="px-6 py-3">Invoice</th><th className="px-6 py-3">Mode</th><th className="px-6 py-3">Status</th><th className="px-6 py-3">Actions</th></tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                    {institutes.map((institute) => (
-                                        <tr key={institute.public_id} className="text-gray-700 dark:text-gray-200">
-                                            <td className="px-6 py-4">
-                                                {institute.logo ? <img src={institute.logo} alt="logo" className="h-8 w-8 rounded object-cover" /> : <span className="text-gray-400 text-xs">No logo</span>}
-                                            </td>
-                                            <td className="px-6 py-4 font-medium">{institute.name}</td>
-                                            <td className="px-6 py-4">{institute.email || '-'}</td>
+                                    {institutes.map((institute) => {
+                                        const logoSrc = institute.logo_url || (institute.logo ? (institute.logo.startsWith('http://') || institute.logo.startsWith('https://') || institute.logo.startsWith('/') ? institute.logo : `/storage/${institute.logo}`) : null);
+
+                                        return (
+                                            <tr key={institute.public_id} className="text-gray-700 dark:text-gray-200">
+                                                <td className="px-6 py-4">
+                                                    {logoSrc ? (
+                                                        <img
+                                                            src={logoSrc}
+                                                            alt="logo"
+                                                            className="h-8 w-8 rounded object-cover"
+                                                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                                        />
+                                                    ) : (
+                                                        <span className="text-gray-400 text-xs">No logo</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 font-medium">{institute.name}</td>
+                                                <td className="px-6 py-4">{institute.email || '-'}</td>
                                             <td className="px-6 py-4"><p>{institute.subscription?.plan?.name || '-'}</p>{institute.subscription && <p className="mt-1 text-xs capitalize text-gray-500">{institute.subscription.status}</p>}</td>
                                             <td className="px-6 py-4 text-xs">
                                                 {institute.subscription?.invoice ? <>
@@ -122,7 +143,7 @@ export default function InstitutesIndex({ user, institutes, plans }) {
                                                 <button type="button" onClick={() => remove(institute)} className="text-red-600 hover:text-red-800 dark:text-red-400">Delete</button>
                                             </td>
                                         </tr>
-                                    ))}
+                                    ); })}
                                 </tbody>
                             </table>
                         </div>

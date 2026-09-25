@@ -55,6 +55,38 @@ Route::get('public/storage/{path}', function (string $path) {
     return Storage::disk('public')->response($path);
 })->where('path', '.*');
 
+// Fallback for "storage/..." URLs when storage:link symlink is missing or bypassed.
+Route::get('storage/{path}', function (string $path) {
+    abort_if(str_contains($path, '..'), 404);
+
+    return Storage::disk('public')->response($path);
+})->where('path', '.*');
+
 // Website URL for opening or downloading a class timetable PDF.
 Route::get('institutes/timetable/export/classes', [TimetableController::class, 'export'])
     ->name('institutes.timetable.export.classes');
+
+// Fallback for direct image URLs like /institutes/xxx.jpg, /logos/xxx.jpg, etc.
+Route::get('institutes/{filename}', function (string $filename) {
+    abort_if(str_contains($filename, '..'), 404);
+    $path = 'institutes/'.$filename;
+    abort_unless(Storage::disk('public')->exists($path), 404);
+
+    return Storage::disk('public')->response($path);
+})->where('filename', '[A-Za-z0-9_\-\.]+');
+
+Route::get('logos/{filename}', function (string $filename) {
+    abort_if(str_contains($filename, '..'), 404);
+    $path = 'logos/'.$filename;
+    abort_unless(Storage::disk('public')->exists($path), 404);
+
+    return Storage::disk('public')->response($path);
+})->where('filename', '[A-Za-z0-9_\-\.]+');
+
+Route::get('favicons/{filename}', function (string $filename) {
+    abort_if(str_contains($filename, '..'), 404);
+    $path = 'favicons/'.$filename;
+    abort_unless(Storage::disk('public')->exists($path), 404);
+
+    return Storage::disk('public')->response($path);
+})->where('filename', '[A-Za-z0-9_\-\.]+');
