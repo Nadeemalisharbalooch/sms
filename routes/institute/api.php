@@ -4,6 +4,7 @@ use App\Http\Controllers\Institute\AcademicClassController;
 use App\Http\Controllers\Institute\AcademicSectionController;
 use App\Http\Controllers\Institute\AcademicSessionController;
 use App\Http\Controllers\Institute\AttendanceController;
+use App\Http\Controllers\Institute\AttendanceReportController;
 use App\Http\Controllers\Institute\ClassSubjectController;
 use App\Http\Controllers\Institute\DashboardController;
 use App\Http\Controllers\Institute\FeeController;
@@ -96,6 +97,16 @@ Route::middleware(['auth:sanctum', 'active.institute.subscription'])->group(func
         ->name('institutes.attendance.index');
     Route::get('institutes/attendance/records', [AttendanceController::class, 'records'])
         ->name('institutes.attendance.records');
+    Route::get('institutes/attendance/overview', [AttendanceReportController::class, 'overview'])
+        ->name('institutes.attendance.overview');
+    Route::get('institutes/attendance/absentees', [AttendanceReportController::class, 'absentees'])
+        ->name('institutes.attendance.absentees');
+    Route::get('institutes/attendance/monthly-register', [AttendanceReportController::class, 'monthlyRegister'])
+        ->name('institutes.attendance.monthly-register');
+    Route::get('institutes/attendance/class-summary', [AttendanceReportController::class, 'classSummary'])
+        ->name('institutes.attendance.class-summary');
+    Route::get('institutes/attendance/student/{studentId}', [AttendanceReportController::class, 'student'])
+        ->whereNumber('studentId')->name('institutes.attendance.student');
     Route::post('institutes/attendance', [AttendanceController::class, 'store'])
         ->name('institutes.attendance.store');
 

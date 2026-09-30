@@ -41,6 +41,30 @@ class NotificationController extends Controller
         ]);
     }
 
+    /**
+     * Lightweight JSON feed of the most recent notifications.
+     *
+     * Used by the admin shell as a fallback whenever the Reverb socket is not
+     * connected, so the tray keeps updating without a page reload.
+     */
+    public function feed(Request $request)
+    {
+        $limit = max(1, min(50, $request->integer('limit', 15)));
+
+        $notifications = $request->user()->notifications()
+            ->latest()
+            ->limit($limit)
+            ->get()
+            ->map(fn (DatabaseNotification $notification) => [
+                'id' => $notification->id,
+                'read_at' => $notification->read_at?->toIso8601String(),
+                'created_at' => $notification->created_at?->toIso8601String(),
+                'data' => $notification->data,
+            ]);
+
+        return response()->json(['notifications' => $notifications]);
+    }
+
     public function markRead(Request $request, DatabaseNotification $notification)
     {
         if ($notification->notifiable_id !== $request->user()->id

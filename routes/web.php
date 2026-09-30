@@ -30,6 +30,7 @@ Route::middleware(['auth', 'admin'])->group(function () {
 
     // Super Admin notification tray
     Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::get('notifications/feed', [NotificationController::class, 'feed'])->name('notifications.feed');
     Route::patch('notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::patch('notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
 

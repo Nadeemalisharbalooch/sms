@@ -18,8 +18,19 @@
     RewriteCond %{REQUEST_URI} (.+)/$
     RewriteRule ^ %1 [L,R=301]
 
+    # Proxy Reverb before the front controller, otherwise the WebSocket
+    # handshake is answered by index.php with 404 instead of 101.
+    # Reverb: WebSocket on /app, HTTP API on /apps, SSE on /events.
+    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+    RewriteCond %{REQUEST_URI} ^/(app|apps|events)(/|$) [NC]
+    RewriteRule ^/(.*)$ http://127.0.0.1:8080/$1 [P,L]
+
+    RewriteCond %{REQUEST_URI} ^/(apps|events)(/|$) [NC]
+    RewriteRule ^/(.*)$ http://127.0.0.1:8080/$1 [P,L]
+
     # Send Requests To Front Controller...
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteRule ^ index.php [L]
 </IfModule>
+
