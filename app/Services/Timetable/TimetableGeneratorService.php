@@ -477,6 +477,18 @@ class TimetableGeneratorService
 
             $classesScheduledCount++;
 
+            // Existing entries can consume capacity when generation is additive.
+            // Count only occupancy in the selected days and available slots.
+            $occupiedClassSlots = 0;
+            foreach ($daySlots as $day => $slotsForDay) {
+                foreach ($slotsForDay as $slot) {
+                    if (isset($classBusy[$groupKey][$day][$slot->id])) {
+                        $occupiedClassSlots++;
+                    }
+                }
+            }
+            $classAvailableSlots = max(0, $totalSlotsPerWeek - $occupiedClassSlots);
+
             $subjectGroups = $classAllocations->groupBy('subject_id');
 
             // Determine if this class has explicit curriculum (workload) entries
@@ -650,18 +662,19 @@ class TimetableGeneratorService
                     $classReqTotal = count($lecturePool);
                     $teacherReqTotal = $teacherTotalRequested[$lecture['teacher_user_id']] ?? 0;
 
-                    if ($classReqTotal > $totalSlotsPerWeek) {
+                    if ($classReqTotal > $classAvailableSlots) {
                         $issueType = 'Class Capacity Exceeded';
-                        $reasonMsg = "Class [{$cName}] has {$classReqTotal} requested lectures, which exceeds weekly limit ({$totalSlotsPerWeek} periods).";
-                        $suggestion = "Reduce weekly periods in curriculum for Class [{$cName}] to fit {$totalSlotsPerWeek} total periods.";
+                        $classSectionName = $sName === null ? $cName : "{$cName} - {$sName}";
+                        $reasonMsg = "Class [{$classSectionName}] has {$classReqTotal} requested lectures, but only {$classAvailableSlots} slots are available in this run ({$totalSlotsPerWeek} weekly slots, {$occupiedClassSlots} already occupied).";
+                        $suggestion = "Reduce weekly curriculum periods for [{$classSectionName}] or increase its available weekly periods.";
                     } elseif ($teacherReqTotal > $totalSlotsPerWeek) {
                         $issueType = 'Teacher Overloaded';
                         $reasonMsg = "Teacher [{$tName}] is assigned {$teacherReqTotal} lectures across classes, which exceeds weekly limit ({$totalSlotsPerWeek} periods).";
                         $suggestion = "Reduce Teacher [{$tName}] workload or assign a different teacher for this subject.";
                     } else {
-                        $issueType = 'Teacher Schedule Clash';
-                        $reasonMsg = "Teacher [{$tName}] is busy teaching other classes during all available free period slots for [{$cName}].";
-                        $suggestion = "Assign a different teacher for this subject in [{$cName}] or adjust period timings.";
+                        $issueType = 'Scheduling Conflict';
+                        $reasonMsg = "The generator could not place this lecture for [{$cName}] within the remaining class slots and teacher availability.";
+                        $suggestion = "Review teacher assignments and existing timetable entries for [{$cName}], then try generating again.";
                     }
 
                     $unassignedDetails[] = [
@@ -695,11 +708,14 @@ class TimetableGeneratorService
             }
         });
 
+        $isComplete = $unassignedLecturesCount === 0;
+
         return [
-            'success' => true,
-            'message' => $unassignedLecturesCount > 0
-                ? "Timetable generated with {$unassignedLecturesCount} unassigned lecture(s). See unassigned_details."
-                : 'Timetable generated successfully.',
+            'success' => $isComplete,
+            'status' => $isComplete ? 'completed' : 'partial',
+            'message' => $isComplete
+                ? 'Timetable generated successfully.'
+                : "Timetable partially generated: {$unassignedLecturesCount} lecture(s) could not be placed. Review the conflict audit.",
             'created_count' => count($allEntriesToInsert),
             'classes_scheduled' => $classesScheduledCount,
             'unassigned_count' => $unassignedLecturesCount,

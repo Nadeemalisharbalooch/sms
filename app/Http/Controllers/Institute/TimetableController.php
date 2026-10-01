@@ -250,9 +250,11 @@ class TimetableController extends Controller
                 $workloadOverrides
             );
 
-            NotificationService::timetablePublished($institute->id, $sessionId, $classIdsToSchedule);
+            if ($result['success']) {
+                NotificationService::timetablePublished($institute->id, $sessionId, $classIdsToSchedule);
+            }
 
-            return ResponseService::success($result, 'Timetable configured and generated successfully');
+            return ResponseService::success($result, $result['message']);
         } catch (\RuntimeException $e) {
             return ResponseService::error($e->getMessage(), 422);
         }
@@ -439,9 +441,11 @@ class TimetableController extends Controller
                 $validated['periods_per_subject'] ?? []
             );
 
-            NotificationService::timetablePublished($institute->id, $sessionId, $validated['class_ids'] ?? []);
+            if ($result['success']) {
+                NotificationService::timetablePublished($institute->id, $sessionId, $validated['class_ids'] ?? []);
+            }
 
-            return ResponseService::success($result, 'Timetable generated successfully');
+            return ResponseService::success($result, $result['message']);
         } catch (\RuntimeException $e) {
             return ResponseService::error($e->getMessage(), 422);
         }

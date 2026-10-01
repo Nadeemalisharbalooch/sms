@@ -422,7 +422,7 @@ class AttendanceReportTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.total_count', 1)
             ->assertJsonPath('data.records.0.consecutive_absent_days', 2)
-            ->assertJsonPath('data.records.0.overall_session_percentage', 0.0);
+            ->assertJsonPath('data.records.0.overall_session_percentage', 0);
     }
 
     // --------------------------------------------------------- monthly register
@@ -900,7 +900,7 @@ class AttendanceReportTest extends TestCase
                 'absent' => 0,
                 'late' => 0,
                 'leave' => 0,
-                'percentage' => 100.0,
+                'percentage' => 100,
             ]);
     }
 }

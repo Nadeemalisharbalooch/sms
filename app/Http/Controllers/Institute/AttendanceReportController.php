@@ -35,7 +35,9 @@ class AttendanceReportController extends Controller
     {
         $validated = $request->validated();
         $context = $this->context($request, (int) $validated['session_id']);
-        if ($context instanceof JsonResponse) return $context;
+        if ($context instanceof JsonResponse) {
+            return $context;
+        }
         [$institute, $session] = $context;
 
         $date = $validated['date'];
@@ -83,7 +85,9 @@ class AttendanceReportController extends Controller
             ];
 
             $overall['total_students'] += $enrollments->count();
-            foreach ($counts as $key => $value) $overall[$key] += $value;
+            foreach ($counts as $key => $value) {
+                $overall[$key] += $value;
+            }
         }
 
         $overall['percentage'] = $this->percentage($overall);
@@ -99,9 +103,13 @@ class AttendanceReportController extends Controller
     {
         $validated = $request->validated();
         $context = $this->context($request, (int) $validated['session_id']);
-        if ($context instanceof JsonResponse) return $context;
+        if ($context instanceof JsonResponse) {
+            return $context;
+        }
         [$institute, $session] = $context;
-        if ($error = $this->scopeError($institute, $validated)) return $error;
+        if ($error = $this->scopeError($institute, $validated)) {
+            return $error;
+        }
 
         $date = $validated['date'];
         $status = $validated['status'] ?? 'absent';
@@ -123,10 +131,14 @@ class AttendanceReportController extends Controller
         $records = [];
         foreach ($enrollments as $enrollment) {
             $days = $rowsByStudentDate->get($enrollment->student_id, collect());
-            if ($this->dayStatus($days->get($date, collect())) !== $status) continue;
+            if ($this->dayStatus($days->get($date, collect())) !== $status) {
+                continue;
+            }
 
             $consecutive = $this->consecutiveStatusDays($days, $date, $status);
-            if (isset($validated['consecutive_days']) && $consecutive < (int) $validated['consecutive_days']) continue;
+            if (isset($validated['consecutive_days']) && $consecutive < (int) $validated['consecutive_days']) {
+                continue;
+            }
 
             $records[] = [
                 'student_id' => $enrollment->student_id,
@@ -152,9 +164,13 @@ class AttendanceReportController extends Controller
     {
         $validated = $request->validated();
         $context = $this->context($request, (int) $validated['session_id']);
-        if ($context instanceof JsonResponse) return $context;
+        if ($context instanceof JsonResponse) {
+            return $context;
+        }
         [$institute, $session] = $context;
-        if ($error = $this->scopeError($institute, $validated)) return $error;
+        if ($error = $this->scopeError($institute, $validated)) {
+            return $error;
+        }
 
         $from = Carbon::createFromFormat('Y-m', $validated['month'])->startOfMonth();
         $to = $from->copy()->endOfMonth();
@@ -211,9 +227,13 @@ class AttendanceReportController extends Controller
     {
         $validated = $request->validated();
         $context = $this->context($request, (int) $validated['session_id']);
-        if ($context instanceof JsonResponse) return $context;
+        if ($context instanceof JsonResponse) {
+            return $context;
+        }
         [$institute, $session] = $context;
-        if ($error = $this->scopeError($institute, $validated)) return $error;
+        if ($error = $this->scopeError($institute, $validated)) {
+            return $error;
+        }
 
         $start = $validated['start_date'] ?? $session->start_date?->toDateString();
         $end = $validated['end_date'] ?? min(now()->toDateString(), $session->end_date?->toDateString() ?? now()->toDateString());
@@ -263,18 +283,26 @@ class AttendanceReportController extends Controller
     {
         $validated = $request->validated();
         $context = $this->context($request, (int) $validated['session_id']);
-        if ($context instanceof JsonResponse) return $context;
+        if ($context instanceof JsonResponse) {
+            return $context;
+        }
         [$institute, $session] = $context;
-        if ($error = $this->scopeError($institute, $validated)) return $error;
+        if ($error = $this->scopeError($institute, $validated)) {
+            return $error;
+        }
 
         $student = Student::query()->where('institute_id', $institute->id)->find($studentId);
-        if (! $student) return ResponseService::notFound('Student not found in the active institute');
+        if (! $student) {
+            return ResponseService::notFound('Student not found in the active institute');
+        }
 
         $enrollment = Enrollment::query()->with(['academicClass', 'section'])
             ->where('student_id', $student->id)
             ->where('session_id', $session->id)
             ->first();
-        if (! $enrollment) return ResponseService::notFound('Student is not enrolled in the selected session');
+        if (! $enrollment) {
+            return ResponseService::notFound('Student is not enrolled in the selected session');
+        }
 
         $rowsByDate = Attendance::query()
             ->where('session_id', $session->id)
@@ -338,23 +366,35 @@ class AttendanceReportController extends Controller
     {
         $instituteId = InstituteUser::query()->where('user_id', $request->user()->id)->where('is_active', true)->value('institute_id');
         $institute = $instituteId ? Institute::find($instituteId) : null;
-        if (! $institute) return ResponseService::error('No active institute is associated with this user', 422);
+        if (! $institute) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
 
         $session = AcademicSession::query()->where('institute_id', $institute->id)->find($sessionId);
-        if (! $session) return ResponseService::error('Validation failed', 422, ['session_id' => ['The selected session does not belong to the active institute.']]);
+        if (! $session) {
+            return ResponseService::error('Validation failed', 422, ['session_id' => ['The selected session does not belong to the active institute.']]);
+        }
 
         return [$institute, $session];
     }
 
     private function scopeError(Institute $institute, array $v): ?JsonResponse
     {
-        if (isset($v['class_id']) && ! AcademicClass::query()->where('institute_id', $institute->id)->whereKey($v['class_id'])->exists()) return ResponseService::error('Validation failed', 422, ['class_id' => ['The selected class does not belong to the active institute.']]);
+        if (isset($v['class_id']) && ! AcademicClass::query()->where('institute_id', $institute->id)->whereKey($v['class_id'])->exists()) {
+            return ResponseService::error('Validation failed', 422, ['class_id' => ['The selected class does not belong to the active institute.']]);
+        }
         if (isset($v['section_id'])) {
             $section = AcademicSection::find($v['section_id']);
-            if (! $section || (isset($v['class_id']) && (int) $section->class_id !== (int) $v['class_id']) || ! AcademicClass::query()->where('institute_id', $institute->id)->whereKey($section->class_id)->exists()) return ResponseService::error('Validation failed', 422, ['section_id' => ['The selected section is outside the requested institute/class.']]);
+            if (! $section || (isset($v['class_id']) && (int) $section->class_id !== (int) $v['class_id']) || ! AcademicClass::query()->where('institute_id', $institute->id)->whereKey($section->class_id)->exists()) {
+                return ResponseService::error('Validation failed', 422, ['section_id' => ['The selected section is outside the requested institute/class.']]);
+            }
         }
-        if (isset($v['subject_id']) && ! Subject::query()->where('institute_id', $institute->id)->whereKey($v['subject_id'])->exists()) return ResponseService::error('Validation failed', 422, ['subject_id' => ['The selected subject does not belong to the active institute.']]);
-        if ($institute->attendance_mode === 'class' && ! empty($v['subject_id'])) return ResponseService::error('Validation failed', 422, ['subject_id' => ['Subject attendance is not available for a class-based institute.']]);
+        if (isset($v['subject_id']) && ! Subject::query()->where('institute_id', $institute->id)->whereKey($v['subject_id'])->exists()) {
+            return ResponseService::error('Validation failed', 422, ['subject_id' => ['The selected subject does not belong to the active institute.']]);
+        }
+        if ($institute->attendance_mode === 'class' && ! empty($v['subject_id'])) {
+            return ResponseService::error('Validation failed', 422, ['subject_id' => ['Subject attendance is not available for a class-based institute.']]);
+        }
 
         return null;
     }
@@ -392,7 +432,9 @@ class AttendanceReportController extends Controller
             ->where('class_id', $classId)
             ->when($sectionId !== null, fn (Builder $query) => $query->where('section_id', $sectionId));
 
-        if ($mode === 'class') return $query->whereNull('subject_id');
+        if ($mode === 'class') {
+            return $query->whereNull('subject_id');
+        }
 
         return $subjectId === null ? $query->whereNotNull('subject_id') : $query->where('subject_id', $subjectId);
     }
@@ -416,7 +458,9 @@ class AttendanceReportController extends Controller
     private function dayStatus(Collection $dayRows): ?string
     {
         foreach (self::DAY_STATUS_PRECEDENCE as $status) {
-            if ($dayRows->contains('status', $status)) return $status;
+            if ($dayRows->contains('status', $status)) {
+                return $status;
+            }
         }
 
         return null;
@@ -432,7 +476,9 @@ class AttendanceReportController extends Controller
 
         foreach ($days as $dayRows) {
             $status = $this->dayStatus($dayRows);
-            if ($status !== null) $counts[$status]++;
+            if ($status !== null) {
+                $counts[$status]++;
+            }
         }
 
         return $counts;
@@ -478,11 +524,17 @@ class AttendanceReportController extends Controller
         $count = 0;
 
         foreach ($days->keys()->sortDesc() as $day) {
-            if ($day > $date) continue;
+            if ($day > $date) {
+                continue;
+            }
 
             $dayStatus = $this->dayStatus($days->get($day));
-            if ($dayStatus === null) continue;
-            if ($dayStatus !== $status) break;
+            if ($dayStatus === null) {
+                continue;
+            }
+            if ($dayStatus !== $status) {
+                break;
+            }
 
             $count++;
         }
