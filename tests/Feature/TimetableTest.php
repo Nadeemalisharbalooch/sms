@@ -6,7 +6,9 @@ use App\Models\AcademicClass;
 use App\Models\AcademicSection;
 use App\Models\AcademicSession;
 use App\Models\Institute;
+use App\Models\InstituteSubscription;
 use App\Models\InstituteUser;
+use App\Models\Plan;
 use App\Models\Subject;
 use App\Models\SubjectAllocation;
 use App\Models\TimetableEntry;
@@ -37,6 +39,23 @@ class TimetableTest extends TestCase
             'start_date' => '2026-08-01',
             'end_date' => '2027-06-30',
             'is_active' => true,
+        ]);
+
+        // Active subscription is required to pass the institute subscription middleware
+        $plan = Plan::firstOrCreate(['name' => 'Trial'], [
+            'price' => 0,
+            'billing_interval' => 'monthly',
+            'trial_days' => 14,
+            'is_active' => true,
+        ]);
+
+        InstituteSubscription::create([
+            'institute_id' => $institute->id,
+            'plan_id' => $plan->id,
+            'status' => 'trialing',
+            'blocked' => false,
+            'starts_at' => now(),
+            'ends_at' => now()->addDays(14),
         ]);
 
         return [$user, $institute, $session];
@@ -688,5 +707,53 @@ class TimetableTest extends TestCase
         $pdfResponse->assertOk();
         $pdfResponse->assertHeader('content-type', 'application/pdf');
         $this->assertStringStartsWith('%PDF-', $pdfResponse->getContent());
+    }
+
+    public function test_generation_fails_fast_when_curriculum_exceeds_available_slots(): void
+    {
+        [$user, $institute, $session] = $this->createInstituteContext();
+
+        // Active subscription is required to pass the institute subscription middleware
+        $plan = Plan::create(['name' => 'Standard Plan', 'price' => 0, 'is_active' => true]);
+
+        $teacher1 = User::factory()->create(['name' => 'Sir Math']);
+        $teacher2 = User::factory()->create(['name' => 'Mam English']);
+        InstituteUser::create(['user_id' => $teacher1->id, 'institute_id' => $institute->id, 'is_active' => true]);
+        InstituteUser::create(['user_id' => $teacher2->id, 'institute_id' => $institute->id, 'is_active' => true]);
+
+        $class = AcademicClass::create(['institute_id' => $institute->id, 'name' => 'Grade 6', 'code' => 'G6']);
+        $subMath = Subject::create(['institute_id' => $institute->id, 'name' => 'Mathematics', 'code' => 'MATH']);
+        $subEng = Subject::create(['institute_id' => $institute->id, 'name' => 'English', 'code' => 'ENG']);
+
+        SubjectAllocation::create(['session_id' => $session->id, 'class_id' => $class->id, 'subject_id' => $subMath->id, 'teacher_user_id' => $teacher1->id]);
+        SubjectAllocation::create(['session_id' => $session->id, 'class_id' => $class->id, 'subject_id' => $subEng->id, 'teacher_user_id' => $teacher2->id]);
+
+        // Only 2 lecture slots exist: curriculum asks for 3 + 4 = 7 lectures
+        TimetableTimeSlot::create(['institute_id' => $institute->id, 'name' => 'Period 1', 'start_time' => '08:00', 'end_time' => '08:45', 'sort_order' => 1]);
+        TimetableTimeSlot::create(['institute_id' => $institute->id, 'name' => 'Break', 'start_time' => '08:45', 'end_time' => '09:15', 'is_break' => true, 'sort_order' => 2]);
+        TimetableTimeSlot::create(['institute_id' => $institute->id, 'name' => 'Period 2', 'start_time' => '09:15', 'end_time' => '10:00', 'sort_order' => 3]);
+
+        Sanctum::actingAs($user);
+
+        $response = $this->postJson('/api/institutes/timetable/wizard-generate', [
+            'session_id' => $session->id,
+            'days' => ['monday'],
+            'curriculum' => [
+                (string) $class->id => [
+                    (string) $subMath->id => 3,
+                    (string) $subEng->id => 4,
+                ],
+            ],
+            'overwrite_existing' => true,
+        ]);
+
+        // Fail fast BEFORE scheduling: clear 422 summary, nothing persisted
+        $response->assertStatus(422);
+        $this->assertStringContainsString('exceeds available slots', $response->json('message'));
+        $this->assertStringContainsString('Grade 6', $response->json('message'));
+        $this->assertStringContainsString('7 lectures requested', $response->json('message'));
+        $this->assertStringContainsString('only 2 weekly slots', $response->json('message'));
+
+        $this->assertSame(0, TimetableEntry::where('session_id', $session->id)->count());
     }
 }

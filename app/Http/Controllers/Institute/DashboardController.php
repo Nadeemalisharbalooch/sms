@@ -11,7 +11,6 @@ use App\Models\FeeVoucher;
 use App\Models\InstituteUser;
 use App\Models\Student;
 use App\Models\TimetableEntry;
-use App\Models\User;
 use App\Services\ResponseService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -40,7 +39,6 @@ class DashboardController extends Controller
         $today = Carbon::today();
         $yesterday = Carbon::yesterday();
         $currentMonth = Carbon::now()->startOfMonth();
-        $previousMonth = Carbon::now()->subMonth()->startOfMonth();
 
         // ── General KPIs ────────────────────────────────────────────────
 
@@ -64,32 +62,24 @@ class DashboardController extends Controller
             ->count('user_id');
 
         // Today's Student Attendance %
-        $todayTotalAttendance = Attendance::query()
+        $attendanceByDate = Attendance::query()
             ->where('session_id', $sessionId)
-            ->where('date', $today)
-            ->count();
+            ->whereBetween('date', [$yesterday, $today])
+            ->selectRaw('date, COUNT(*) as total, SUM(CASE WHEN status IN (?, ?) THEN 1 ELSE 0 END) as present', ['present', 'late'])
+            ->groupBy('date')
+            ->get()
+            ->keyBy(fn ($row) => Carbon::parse($row->date)->toDateString());
 
-        $todayPresentAttendance = Attendance::query()
-            ->where('session_id', $sessionId)
-            ->where('date', $today)
-            ->whereIn('status', ['present', 'late'])
-            ->count();
+        $todayTotalAttendance = (int) ($attendanceByDate->get($today->toDateString())->total ?? 0);
+        $todayPresentAttendance = (int) ($attendanceByDate->get($today->toDateString())->present ?? 0);
 
         $todayAttendanceRate = $todayTotalAttendance > 0
             ? round(($todayPresentAttendance / $todayTotalAttendance) * 100, 1)
             : 0.0;
 
         // Yesterday's attendance for trend
-        $yesterdayTotalAttendance = Attendance::query()
-            ->where('session_id', $sessionId)
-            ->where('date', $yesterday)
-            ->count();
-
-        $yesterdayPresentAttendance = Attendance::query()
-            ->where('session_id', $sessionId)
-            ->where('date', $yesterday)
-            ->whereIn('status', ['present', 'late'])
-            ->count();
+        $yesterdayTotalAttendance = (int) ($attendanceByDate->get($yesterday->toDateString())->total ?? 0);
+        $yesterdayPresentAttendance = (int) ($attendanceByDate->get($yesterday->toDateString())->present ?? 0);
 
         $yesterdayAttendanceRate = $yesterdayTotalAttendance > 0
             ? round(($yesterdayPresentAttendance / $yesterdayTotalAttendance) * 100, 1)
@@ -108,26 +98,16 @@ class DashboardController extends Controller
         // ── Financial KPIs ──────────────────────────────────────────────
 
         // Monthly Revenue (current month)
-        $monthlyRevenue = FeePayment::query()
-            ->where('institute_id', $instituteId)
-            ->where('payment_date', '>=', $currentMonth)
-            ->where('payment_date', '<', $currentMonth->copy()->addMonth())
-            ->sum('amount_paid');
-
-        // Previous month revenue for trend
-        $previousMonthRevenue = FeePayment::query()
-            ->where('institute_id', $instituteId)
-            ->where('payment_date', '>=', $previousMonth)
-            ->where('payment_date', '<', $currentMonth)
-            ->sum('amount_paid');
+        // Aggregate all six chart months and the two KPI periods in one indexed
+        // range scan instead of issuing one SUM query per month plus two more.
+        $revenueMetrics = $this->buildRevenueMetrics($instituteId, $today, $currentMonth);
+        $monthlyRevenue = $revenueMetrics['current'];
+        $previousMonthRevenue = $revenueMetrics['previous'];
 
         $revenueTrend = $this->calculateTrend((float) $monthlyRevenue, (float) $previousMonthRevenue);
 
         // Today's Collection
-        $todayCollection = FeePayment::query()
-            ->where('institute_id', $instituteId)
-            ->where('payment_date', $today)
-            ->sum('amount_paid');
+        $todayCollection = $revenueMetrics['today'];
 
         // Outstanding Arrears (total unpaid balance across all vouchers in session)
         $outstandingArrears = FeeVoucher::query()
@@ -147,11 +127,11 @@ class DashboardController extends Controller
 
         // ── Revenue Chart (Last 6 months) ───────────────────────────────
 
-        $revenueChart = $this->buildRevenueChart($instituteId);
+        $revenueChart = $revenueMetrics['chart'];
 
         // ── Recent Activities ───────────────────────────────────────────
 
-        $recentActivities = $this->buildRecentActivities($instituteId, $sessionId, $activityLimit);
+        $recentActivities = $this->buildRecentActivities($instituteId, $sessionId, $activityLimit, $todayTotalAttendance);
 
         return ResponseService::success([
             'kpis' => [
@@ -252,34 +232,55 @@ class DashboardController extends Controller
      *
      * @return array<int, array{month: string, collected: float}>
      */
-    private function buildRevenueChart(int $instituteId): array
+    private function buildRevenueMetrics(int $instituteId, Carbon $today, Carbon $currentMonth): array
     {
-        $now = Carbon::now()->startOfMonth();
         $months = [];
         for ($i = 5; $i >= 0; $i--) {
-            $month = $now->copy()->subMonthsNoOverflow($i);
+            $month = $currentMonth->copy()->subMonthsNoOverflow($i);
             $months[] = [
                 'month' => $month->format('M'),
-                'start' => $month->copy()->startOfMonth(),
-                'end' => $month->copy()->endOfMonth(),
+                'start' => $month->toDateString(),
+                'end' => $month->copy()->addMonth()->toDateString(),
             ];
         }
+
+        $start = $months[0]['start'];
+        $end = $months[5]['end'];
+        $selects = [];
+        foreach ($months as $index => $month) {
+            $selects[] = sprintf(
+                'COALESCE(SUM(CASE WHEN payment_date >= ? AND payment_date < ? THEN amount_paid ELSE 0 END), 0) as month_%d',
+                $index
+            );
+        }
+        $selects[] = 'COALESCE(SUM(CASE WHEN payment_date = ? THEN amount_paid ELSE 0 END), 0) as today';
+        $bindings = [];
+        foreach ($months as $month) {
+            array_push($bindings, $month['start'], $month['end']);
+        }
+        $bindings[] = $today->toDateString();
+
+        $totals = FeePayment::query()
+            ->where('institute_id', $instituteId)
+            ->where('payment_date', '>=', $start)
+            ->where('payment_date', '<', $end)
+            ->selectRaw(implode(', ', $selects), $bindings)
+            ->first();
 
         $chart = [];
-        foreach ($months as $m) {
-            $collected = FeePayment::query()
-                ->where('institute_id', $instituteId)
-                ->where('payment_date', '>=', $m['start'])
-                ->where('payment_date', '<=', $m['end'])
-                ->sum('amount_paid');
-
+        foreach ($months as $index => $month) {
             $chart[] = [
-                'month' => $m['month'],
-                'collected' => (float) $collected,
+                'month' => $month['month'],
+                'collected' => (float) $totals->{'month_'.$index},
             ];
         }
 
-        return $chart;
+        return [
+            'chart' => $chart,
+            'current' => (float) $totals->month_5,
+            'previous' => (float) $totals->month_4,
+            'today' => (float) $totals->today,
+        ];
     }
 
     /**
@@ -287,7 +288,7 @@ class DashboardController extends Controller
      *
      * @return array<int, array{id: string, type: string, title: string, description: string, timestamp: string}>
      */
-    private function buildRecentActivities(int $instituteId, int $sessionId, int $limit): array
+    private function buildRecentActivities(int $instituteId, int $sessionId, int $limit, int $todayAttendanceCount): array
     {
         $activities = [];
 
@@ -345,17 +346,11 @@ class DashboardController extends Controller
             ->first();
 
         if ($todayAttendanceMarked !== null) {
-            $markedBy = User::find($todayAttendanceMarked->marked_by_user_id);
-            $totalMarkedToday = Attendance::query()
-                ->where('session_id', $sessionId)
-                ->where('date', $today)
-                ->count();
-
             $activities[] = [
                 'id' => 'act_att_' . $todayAttendanceMarked->id,
                 'type' => 'attendance',
                 'title' => 'Attendance Marked',
-                'description' => $totalMarkedToday . ' student attendance records marked for ' . $today->format('M d'),
+                'description' => $todayAttendanceCount . ' student attendance records marked for ' . $today->format('M d'),
                 'timestamp' => $todayAttendanceMarked->created_at->toIso8601String(),
             ];
         }

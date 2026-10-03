@@ -1,9 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
-import getEcho, { onRealtimeStateChange } from '../echo';
 
 const NOTIFICATION_EVENT = 'Illuminate\\Notifications\\Events\\BroadcastNotificationCreated';
 const DEFAULT_POLL_INTERVAL = 15000;
 const MAX_TOASTS = 4;
+const latestItemsByUser = new Map();
+const itemListenersByUser = new Map();
+
+export function useRealtimeNotificationItems(userId) {
+    const [items, setItems] = useState(() => latestItemsByUser.get(userId) || []);
+
+    useEffect(() => {
+        const listeners = itemListenersByUser.get(userId) || new Set();
+        listeners.add(setItems);
+        itemListenersByUser.set(userId, listeners);
+        setItems(latestItemsByUser.get(userId) || []);
+
+        return () => {
+            listeners.delete(setItems);
+            if (listeners.size === 0) {
+                itemListenersByUser.delete(userId);
+            }
+        };
+    }, [userId]);
+
+    return items;
+}
 
 function channelName(userId) {
     return `App.Models.User.${userId}`;
@@ -72,7 +93,6 @@ export default function useRealtimeNotifications(user) {
     const [items, setItems] = useState([]);
     const [toasts, setToasts] = useState([]);
     const [transport, setTransport] = useState('polling');
-    const channelRef = useRef(null);
     const seenRef = useRef(new Set());
     const baselineRef = useRef(false);
 
@@ -82,7 +102,10 @@ export default function useRealtimeNotifications(user) {
         }
 
         setUnread((count) => count + incoming.length);
-        setItems((list) => [...incoming, ...list]);
+        const sharedItems = [...incoming, ...(latestItemsByUser.get(user.id) || [])].slice(0, 50);
+        latestItemsByUser.set(user.id, sharedItems);
+        setItems(sharedItems);
+        itemListenersByUser.get(user.id)?.forEach((listener) => listener(sharedItems));
         setToasts((list) => [...incoming, ...list].slice(0, MAX_TOASTS));
     };
 
@@ -91,12 +114,20 @@ export default function useRealtimeNotifications(user) {
             return undefined;
         }
 
-        const echo = getEcho();
         const name = channelName(user.id);
         let timer = null;
         let cancelled = false;
+        let pollInFlight = false;
+        let echo = null;
+        let unwatch = () => {};
 
         const poll = async () => {
+            if (pollInFlight) {
+                return;
+            }
+
+            pollInFlight = true;
+
             try {
                 const response = await fetch(route('notifications.feed'), {
                     headers: { Accept: 'application/json' },
@@ -134,6 +165,8 @@ export default function useRealtimeNotifications(user) {
                 if (import.meta.env.DEV) {
                     console.warn('Notification poll failed:', error);
                 }
+            } finally {
+                pollInFlight = false;
             }
         };
 
@@ -153,50 +186,74 @@ export default function useRealtimeNotifications(user) {
             }
         };
 
-        const unwatch = onRealtimeStateChange((state) => {
-            if (cancelled) {
+        const attachRealtime = async () => {
+            if (! import.meta.env.VITE_REVERB_APP_KEY || import.meta.env.VITE_REVERB_ENABLED === 'false') {
+                if (! cancelled) {
+                    startPolling();
+                }
+
                 return;
             }
 
-            if (state === 'connected') {
-                setTransport('websocket');
-                stopPolling();
-                return;
-            }
+            try {
+                const { default: getEcho, onRealtimeStateChange } = await import('../echo');
+                if (cancelled) {
+                    return;
+                }
 
-            startPolling();
-        });
-
-        // Seed the baseline on mount so anything delivered later, over either
-        // transport, is counted as new.
-        poll();
-
-        if (echo) {
-            const channel = echo.private(name);
-            channelRef.current = channel;
-
-            channel.listen(`.${NOTIFICATION_EVENT}`, (payload) => {
-                const item = fromBroadcast(payload);
-                const data = payload || {};
-
-                if (data.id) {
-                    if (seenRef.current.has(data.id)) {
+                echo = getEcho();
+                unwatch = onRealtimeStateChange((state) => {
+                    if (cancelled) {
                         return;
                     }
 
-                    seenRef.current.add(data.id);
+                    if (state === 'connected') {
+                        setTransport('websocket');
+                        stopPolling();
+                        return;
+                    }
+
+                    startPolling();
+                });
+
+                if (echo) {
+                    echo.private(name).listen(`.${NOTIFICATION_EVENT}`, (payload) => {
+                        const item = fromBroadcast(payload);
+                        const data = payload || {};
+
+                        if (data.id) {
+                            if (seenRef.current.has(data.id)) {
+                                return;
+                            }
+
+                            seenRef.current.add(data.id);
+                        }
+
+                        push([item]);
+                    });
+                }
+            } catch (error) {
+                if (import.meta.env.DEV) {
+                    console.warn('Realtime notifications unavailable:', error);
                 }
 
-                push([item]);
-            });
-        }
+                if (! cancelled) {
+                    startPolling();
+                }
+            }
+        };
+
+        // Seed the baseline on mount so anything delivered later, over either
+        // transport, is counted as new. Load the realtime client after the page
+        // has rendered; sites without Reverb skip that code entirely.
+        poll();
+        attachRealtime();
 
         return () => {
             cancelled = true;
             stopPolling();
             unwatch();
             echo?.leaveChannel(name);
-            channelRef.current = null;
         };
     }, [user?.id]);
 

@@ -47,17 +47,24 @@ class AttendanceReportController extends Controller
             ->get()
             ->groupBy(fn (Enrollment $enrollment) => $enrollment->class_id.':'.($enrollment->section_id ?? 'null'));
 
+        $classIds = $groups->map(fn (Collection $enrollments) => (int) $enrollments->first()->class_id)->unique();
+        $attendanceByGroup = Attendance::query()
+            ->where('session_id', $session->id)
+            ->whereIn('class_id', $classIds)
+            ->where('date', $date)
+            ->when($institute->attendance_mode === 'class', fn (Builder $query) => $query->whereNull('subject_id'))
+            ->when($institute->attendance_mode === 'subject', fn (Builder $query) => $query->whereNotNull('subject_id'))
+            ->with('markedBy:id,name')
+            ->get()
+            ->groupBy(fn (Attendance $row) => $row->class_id.':'.($row->section_id ?? 'null'));
+
         $overall = ['total_students' => 0, 'present' => 0, 'absent' => 0, 'late' => 0, 'leave' => 0, 'unmarked' => 0];
         $classes = [];
 
         foreach ($groups as $enrollments) {
             $first = $enrollments->first();
 
-            $rows = $this->reportAttendanceQuery($session->id, (int) $first->class_id, $first->section_id, null, $institute->attendance_mode)
-                ->when($first->section_id === null, fn (Builder $query) => $query->whereNull('section_id'))
-                ->whereDate('date', $date)
-                ->with('markedBy:id,name')
-                ->get();
+            $rows = $attendanceByGroup->get($first->class_id.':'.($first->section_id ?? 'null'), collect());
             $rowsByStudentDate = $this->indexRows($rows);
 
             $counts = ['present' => 0, 'absent' => 0, 'late' => 0, 'leave' => 0, 'unmarked' => 0];

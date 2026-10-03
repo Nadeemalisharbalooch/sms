@@ -1,12 +1,12 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 import AdminLayout from '../../Layouts/AdminLayout';
-import useRealtimeNotifications from '../../hooks/useRealtimeNotifications';
+import { useRealtimeNotificationItems } from '../../hooks/useRealtimeNotifications';
 
 export default function NotificationsIndex({ user, notifications, filters }) {
     const [search, setSearch] = useState(filters.search || '');
     const [status, setStatus] = useState(filters.status || '');
-    const { items: liveItems } = useRealtimeNotifications(user);
+    const liveItems = useRealtimeNotificationItems(user.id);
     const applyFilters = (event) => {
         event.preventDefault();
         router.get(
@@ -16,7 +16,23 @@ export default function NotificationsIndex({ user, notifications, filters }) {
         );
     };
 
-    const allItems = [...liveItems, ...notifications.data];
+    const existingIds = new Set(notifications.data.map((item) => item.id));
+    const allItems = [
+        ...liveItems
+            .filter((item) => ! existingIds.has(item.id))
+            .map((item) => ({
+                ...item,
+                data: {
+                    title: item.title,
+                    body: item.body,
+                    priority: item.priority,
+                    category: item.category,
+                    action_text: item.action_text,
+                    action_url: item.action_url,
+                },
+            })),
+        ...notifications.data,
+    ];
     const unreadCount = allItems.filter((item) => !item.read_at).length;
 
     return (

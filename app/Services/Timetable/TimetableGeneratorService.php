@@ -465,17 +465,15 @@ class TimetableGeneratorService
             }
         }
 
-        $allEntriesToInsert = [];
-        $unassignedLecturesCount = 0;
-        $unassignedDetails = [];
-        $classesScheduledCount = 0;
+        // Pre-flight validation: fail fast when a class/section requests more lectures
+        // than there are weekly slots, before touching any entries.
+        $classCapacity = [];
+        $capacityIssues = [];
 
         foreach ($groupedAllocations as $groupKey => $classAllocations) {
             $first = $classAllocations->first();
             $classId = $first->class_id;
             $sectionId = $first->section_id;
-
-            $classesScheduledCount++;
 
             // Existing entries can consume capacity when generation is additive.
             // Count only occupancy in the selected days and available slots.
@@ -488,6 +486,76 @@ class TimetableGeneratorService
                 }
             }
             $classAvailableSlots = max(0, $totalSlotsPerWeek - $occupiedClassSlots);
+            $classCapacity[$groupKey] = [
+                'total' => $totalSlotsPerWeek,
+                'occupied' => $occupiedClassSlots,
+                'available' => $classAvailableSlots,
+            ];
+
+            // Mirror the lecture pool build: subjects with explicit curriculum
+            // count their weekly_periods, subjects without count as 1 lecture.
+            $subjectGroups = $classAllocations->groupBy('subject_id');
+
+            $hasAnyWorkloads = false;
+            foreach ($subjectGroups as $subjectId => $_allocs) {
+                if (isset($workloads[$classId.'_'.$subjectId])) {
+                    $hasAnyWorkloads = true;
+                    break;
+                }
+            }
+
+            $requestedLectures = 0;
+            foreach ($subjectGroups as $subjectId => $subjectAllocs) {
+                if ($hasAnyWorkloads && ! isset($workloads[$classId.'_'.$subjectId])) {
+                    continue;
+                }
+
+                $requestedLectures += isset($workloads[$classId.'_'.$subjectId])
+                    ? (int) $workloads[$classId.'_'.$subjectId]->weekly_periods
+                    : 1;
+            }
+
+            if ($requestedLectures > $classAvailableSlots) {
+                $cName = $classNames[$classId]->name ?? "Class #{$classId}";
+                $sName = $sectionId !== null && isset($sectionNames[$sectionId]) ? $sectionNames[$sectionId]->name : null;
+                $classSectionName = $sName === null ? $cName : "{$cName} - {$sName}";
+
+                $capacityIssues[] = sprintf(
+                    '[%s]: %d lectures requested but only %d weekly slots available (%d total, %d already occupied).',
+                    $classSectionName,
+                    $requestedLectures,
+                    $classAvailableSlots,
+                    $totalSlotsPerWeek,
+                    $occupiedClassSlots
+                );
+            }
+        }
+
+        if (! empty($capacityIssues)) {
+            throw new \RuntimeException(
+                'Timetable generation stopped before scheduling: curriculum exceeds available slots for '
+                .count($capacityIssues).' class(es)/section(s). '
+                .implode(' ', $capacityIssues)
+                .' Reduce weekly curriculum periods or increase available weekly periods for these classes, then try again.'
+            );
+        }
+
+        $allEntriesToInsert = [];
+        $unassignedLecturesCount = 0;
+        $unassignedDetails = [];
+        $classesScheduledCount = 0;
+
+        foreach ($groupedAllocations as $groupKey => $classAllocations) {
+            $first = $classAllocations->first();
+            $classId = $first->class_id;
+            $sectionId = $first->section_id;
+
+            $classesScheduledCount++;
+
+            // Capacity was already computed during the pre-flight validation pass.
+            $capacity = $classCapacity[$groupKey];
+            $occupiedClassSlots = $capacity['occupied'];
+            $classAvailableSlots = $capacity['available'];
 
             $subjectGroups = $classAllocations->groupBy('subject_id');
 
