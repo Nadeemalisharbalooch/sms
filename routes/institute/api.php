@@ -8,6 +8,7 @@ use App\Http\Controllers\Institute\AttendanceReportController;
 use App\Http\Controllers\Institute\ClassSubjectController;
 use App\Http\Controllers\Institute\DashboardController;
 use App\Http\Controllers\Institute\FeeController;
+use App\Http\Controllers\Institute\FeeReportController;
 use App\Http\Controllers\Institute\InstituteController;
 use App\Http\Controllers\Institute\NotificationController;
 use App\Http\Controllers\Institute\PermissionController;
@@ -224,6 +225,18 @@ Route::middleware(['auth:sanctum', 'active.institute.subscription'])->group(func
 
     Route::get('institutes/fees/records', [FeeController::class, 'records'])
         ->name('institutes.fees.records');
+
+    // Fee reports
+    Route::get('institutes/fees/reports/collections', [FeeReportController::class, 'collections'])
+        ->name('institutes.fees.reports.collections');
+    Route::get('institutes/fees/reports/defaulters', [FeeReportController::class, 'defaulters'])
+        ->name('institutes.fees.reports.defaulters');
+    Route::get('institutes/fees/reports/class-recovery', [FeeReportController::class, 'classRecovery'])
+        ->name('institutes.fees.reports.class-recovery');
+    Route::get('institutes/fees/reports/category-summary', [FeeReportController::class, 'categorySummary'])
+        ->name('institutes.fees.reports.category-summary');
+    Route::get('institutes/fees/student-ledger/{student_id}', [FeeReportController::class, 'studentLedger'])
+        ->whereNumber('student_id')->name('institutes.fees.student-ledger.show');
 
     // API 5A: Fetch one student's voucher ledger and summary.
     Route::get('institutes/fees/student-ledger', [FeeController::class, 'studentLedger'])
