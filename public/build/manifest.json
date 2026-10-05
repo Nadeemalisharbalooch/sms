@@ -1,9 +1,12 @@
 {
-  "_AdminLayout-DcD7S3TB.js": {
-    "file": "assets/AdminLayout-DcD7S3TB.js",
+  "_AdminLayout-2JVQpu64.js": {
+    "file": "assets/AdminLayout-2JVQpu64.js",
     "name": "AdminLayout",
     "imports": [
       "resources/js/app.jsx"
+    ],
+    "dynamicImports": [
+      "resources/js/echo.js"
     ]
   },
   "_fonts-DkuEHybc.css": {
@@ -68,7 +71,7 @@
     "isEntry": true
   },
   "resources/js/Pages/Auth/Login.jsx": {
-    "file": "assets/Login-CcwoG_2t.js",
+    "file": "assets/Login-CO5cNeI6.js",
     "name": "Login",
     "src": "resources/js/Pages/Auth/Login.jsx",
     "isDynamicEntry": true,
@@ -77,67 +80,67 @@
     ]
   },
   "resources/js/Pages/Dashboard.jsx": {
-    "file": "assets/Dashboard-DWxo4zgg.js",
+    "file": "assets/Dashboard-C-I3TJXT.js",
     "name": "Dashboard",
     "src": "resources/js/Pages/Dashboard.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AdminLayout-DcD7S3TB.js"
+      "_AdminLayout-2JVQpu64.js"
     ]
   },
   "resources/js/Pages/Institutes/Index.jsx": {
-    "file": "assets/Index-DuD7Bthg.js",
+    "file": "assets/Index-C_jWQd5R.js",
     "name": "Index",
     "src": "resources/js/Pages/Institutes/Index.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AdminLayout-DcD7S3TB.js"
+      "_AdminLayout-2JVQpu64.js"
     ]
   },
   "resources/js/Pages/Notifications/Index.jsx": {
-    "file": "assets/Index-sI7HQd-J.js",
+    "file": "assets/Index-CBWtqlba.js",
     "name": "Index",
     "src": "resources/js/Pages/Notifications/Index.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AdminLayout-DcD7S3TB.js"
+      "_AdminLayout-2JVQpu64.js"
     ]
   },
   "resources/js/Pages/Plans/Index.jsx": {
-    "file": "assets/Index-DypoPGXx.js",
+    "file": "assets/Index-Fdnrp_Gw.js",
     "name": "Index",
     "src": "resources/js/Pages/Plans/Index.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AdminLayout-DcD7S3TB.js"
+      "_AdminLayout-2JVQpu64.js"
     ]
   },
   "resources/js/Pages/Settings.jsx": {
-    "file": "assets/Settings-D1bX6Rjb.js",
+    "file": "assets/Settings-B7NbjVoq.js",
     "name": "Settings",
     "src": "resources/js/Pages/Settings.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AdminLayout-DcD7S3TB.js"
+      "_AdminLayout-2JVQpu64.js"
     ]
   },
   "resources/js/Pages/SubscriptionInvoices/Index.jsx": {
-    "file": "assets/Index-B0BU2GZa.js",
+    "file": "assets/Index-C60fXVIS.js",
     "name": "Index",
     "src": "resources/js/Pages/SubscriptionInvoices/Index.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AdminLayout-DcD7S3TB.js"
+      "_AdminLayout-2JVQpu64.js"
     ]
   },
   "resources/js/app.jsx": {
-    "file": "assets/app-BA_oGhGF.js",
+    "file": "assets/app-B8EfPi1Z.js",
     "name": "app",
     "src": "resources/js/app.jsx",
     "isEntry": true,
@@ -152,6 +155,15 @@
     ],
     "css": [
       "assets/app-BFXlP5yR.css"
+    ]
+  },
+  "resources/js/echo.js": {
+    "file": "assets/echo-CJWGGfMV.js",
+    "name": "echo",
+    "src": "resources/js/echo.js",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.jsx"
     ]
   }
 }
