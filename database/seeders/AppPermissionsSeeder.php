@@ -20,10 +20,12 @@ class AppPermissionsSeeder extends Seeder
                 // Convention: module.action (e.g. users.list)
                 $name = sprintf('%s.%s', $module, $action);
 
-                Permission::firstOrCreate([
-                    'name' => $name,
-                    'guard_name' => 'web',
-                ]);
+                foreach (['web', 'sanctum'] as $guardName) {
+                    Permission::firstOrCreate([
+                        'name' => $name,
+                        'guard_name' => $guardName,
+                    ]);
+                }
             }
         }
 
@@ -47,6 +49,19 @@ class AppPermissionsSeeder extends Seeder
 
             $adminRole->syncPermissions($permissionNames);
         }
+
+        // Institute roles use the sanctum guard. Keep every institute Admin
+        // role fully permissioned, including roles created before this seeder ran.
+        $sanctumPermissionNames = Permission::query()
+            ->where('guard_name', 'sanctum')
+            ->pluck('name')
+            ->all();
+
+        Role::query()
+            ->where('name', 'Admin')
+            ->where('guard_name', 'sanctum')
+            ->get()
+            ->each(fn (Role $role) => $role->syncPermissions($sanctumPermissionNames));
     }
 }
 

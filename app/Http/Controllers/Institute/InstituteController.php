@@ -101,12 +101,27 @@ class InstituteController extends Controller
                 'is_active' => true,
             ]);
 
+            $adminRole = null;
             foreach (['Admin', 'Teacher', 'Student'] as $roleName) {
-                Role::query()->create([
+                $role = Role::query()->create([
                     'institute_id' => $institute->id,
                     'name' => $roleName,
                     'guard_name' => 'sanctum',
                 ]);
+
+                if ($roleName === 'Admin') {
+                    $adminRole = $role;
+                }
+            }
+
+            if ($adminRole !== null) {
+                $adminPermissions = \Spatie\Permission\Models\Permission::query()
+                    ->where('guard_name', 'sanctum')
+                    ->pluck('name')
+                    ->all();
+
+                $adminRole->syncPermissions($adminPermissions);
+                $user->assignRole($adminRole);
             }
 
             $this->assignTrialSubscription($institute);

@@ -67,8 +67,14 @@ public function store(StoreRoleRequest $request)
         'guard_name' => $guardName
     ]);
 
-    // Check if permissions are provided in the request
-    if (array_key_exists('permissions', $validated)) {
+    // Admin roles always receive the full permission set for their guard.
+    if (strcasecmp($role->name, 'Admin') === 0) {
+        $permissionNames = \Spatie\Permission\Models\Permission::query()
+            ->where('guard_name', $guardName)
+            ->pluck('name')
+            ->all();
+        $role->syncPermissions($permissionNames);
+    } elseif (array_key_exists('permissions', $validated)) {
         // Normalize permissions similar to update method
         $permissionIds = $validated['permissions'] ?? [];
 
@@ -137,11 +143,22 @@ public function store(StoreRoleRequest $request)
             return ResponseService::notFound('Role not found');
         }
 
+        if ($this->isAdminRole($role)) {
+            return ResponseService::error('The Admin role cannot be edited', 403);
+        }
+
         $validated = $request->validated();
 
         $role->update(collect($validated)->only(['name', 'guard_name'])->all());
 
-        if (array_key_exists('permissions', $validated)) {
+        if (strcasecmp($role->name, 'Admin') === 0) {
+            $permissionNames = \Spatie\Permission\Models\Permission::query()
+                ->where('guard_name', $role->guard_name)
+                ->pluck('name')
+                ->all();
+
+            $role->syncPermissions($permissionNames);
+        } elseif (array_key_exists('permissions', $validated)) {
             // UpdateRoleRequest validates `permissions.*` as permission IDs.
             // Spatie's syncPermissions expects permission names by default.
             $permissionIds = $validated['permissions'] ?? [];
@@ -191,6 +208,10 @@ public function store(StoreRoleRequest $request)
             return ResponseService::notFound('Role not found');
         }
 
+        if ($this->isAdminRole($role)) {
+            return ResponseService::error('The Admin role cannot be deleted', 403);
+        }
+
         $role->delete();
         return ResponseService::success(
             new RoleResource($role),
@@ -211,5 +232,10 @@ public function store(StoreRoleRequest $request)
     private function belongsToActiveInstitute(Request $request, Role $role): bool
     {
         return (int) $role->institute_id === $this->activeInstituteId($request);
+    }
+
+    private function isAdminRole(Role $role): bool
+    {
+        return strcasecmp($role->name, 'Admin') === 0;
     }
 }
