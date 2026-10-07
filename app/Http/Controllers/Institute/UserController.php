@@ -175,6 +175,8 @@ class UserController extends Controller
         $validated = $request->validated();
         $userData = $this->userData($validated);
         $userData['is_accept_terms'] = true;
+        $userData['email_verified_at'] = now();
+        $userData['is_institute'] = true;
         $instituteId = $this->activeInstituteId($request);
 
         if ($instituteId === null) {
@@ -405,7 +407,6 @@ class UserController extends Controller
         } else {
             return;
         }
-
         $roles = $this->rolesForActiveInstitute($roleIds, $instituteId);
         if ($roles->count() !== count($roleIds)) {
             throw new \Exception('Invalid role IDs provided');

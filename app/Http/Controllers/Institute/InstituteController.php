@@ -8,6 +8,7 @@ use App\Http\Requests\Institute\StoreInstituteRequest;
 use App\Http\Requests\Institute\UpdateInstituteRequest;
 use App\Http\Resources\Institute\InstituteResource;
 use App\Models\Institute;
+use App\Models\AcademicSession;
 use App\Models\InstituteSubscription;
 use App\Models\InstituteUser;
 use App\Models\Plan;
@@ -82,9 +83,20 @@ class InstituteController extends Controller
         $institute = DB::transaction(function () use ($request, $user) {
 
             $data = $request->validated();
+            $academicSession = $data['academic_session'];
+            unset($data['academic_session']);
+
             $data = $this->handleFileUploads($data);
 
             $institute = Institute::create($data);
+
+            AcademicSession::create([
+                'institute_id' => $institute->id,
+                'name' => $academicSession['name'],
+                'start_date' => $academicSession['start_date'],
+                'end_date' => $academicSession['end_date'],
+                'is_active' => true,
+            ]);
 
             $user->update([
                 'is_institute' => true,
@@ -126,7 +138,7 @@ class InstituteController extends Controller
         });
 
         return ResponseService::success(
-            new InstituteResource($institute),
+            new InstituteResource($institute->load('academicSessions')),
             'Institute created successfully'
         );
     }

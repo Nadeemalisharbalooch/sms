@@ -25,6 +25,10 @@ class StoreInstituteRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
+            'academic_session' => ['required', 'array'],
+            'academic_session.name' => ['required', 'string', 'max:100'],
+            'academic_session.start_date' => ['required', 'date_format:Y-m-d'],
+            'academic_session.end_date' => ['required', 'date_format:Y-m-d', 'after:academic_session.start_date'],
 
             'email' => [
                 'nullable',

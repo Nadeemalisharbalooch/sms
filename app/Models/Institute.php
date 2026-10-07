@@ -72,6 +72,11 @@ class Institute extends Model
         return $this->hasMany(InstituteUser::class);
     }
 
+    public function academicSessions(): HasMany
+    {
+        return $this->hasMany(AcademicSession::class);
+    }
+
     public function owner(): HasOneThrough
     {
         return $this->hasOneThrough(
