@@ -13,6 +13,7 @@ use App\Models\InstituteUser;
 use App\Models\Plan;
 use App\Models\User;
 use App\Services\ResponseService;
+use App\Services\RolePermissionService;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Auth;
@@ -115,12 +116,7 @@ class InstituteController extends Controller
             }
 
             if ($adminRole !== null) {
-                $adminPermissions = \Spatie\Permission\Models\Permission::query()
-                    ->where('guard_name', 'sanctum')
-                    ->pluck('name')
-                    ->all();
-
-                $adminRole->syncPermissions($adminPermissions);
+                RolePermissionService::syncAdminRole($adminRole);
                 $user->assignRole($adminRole);
             }
 

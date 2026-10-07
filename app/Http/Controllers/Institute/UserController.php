@@ -11,6 +11,7 @@ use App\Models\InstituteUser;
 use App\Models\User;
 use App\Services\NotificationService;
 use App\Services\ResponseService;
+use App\Services\RolePermissionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Spatie\Permission\Models\Role;
@@ -61,6 +62,14 @@ class UserController extends Controller
             ->where('roles.institute_id', $instituteId)
             ->with('permissions:id,name,guard_name')
             ->get(['roles.id', 'roles.name', 'roles.guard_name']);
+
+        // Repair Admin roles on access as well, so existing institutes do not
+        // stay permissionless when the permission seeder was not rerun.
+        $roles->filter(fn ($role) => strcasecmp($role->name, 'Admin') === 0)
+            ->each(function ($role) {
+                RolePermissionService::syncAdminRole($role);
+                $role->load('permissions:id,name,guard_name');
+            });
 
         $permissions = $roles
             ->pluck('permissions')

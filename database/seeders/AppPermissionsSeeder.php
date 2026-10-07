@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use App\Services\RolePermissionService;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
@@ -52,16 +53,11 @@ class AppPermissionsSeeder extends Seeder
 
         // Institute roles use the sanctum guard. Keep every institute Admin
         // role fully permissioned, including roles created before this seeder ran.
-        $sanctumPermissionNames = Permission::query()
-            ->where('guard_name', 'sanctum')
-            ->pluck('name')
-            ->all();
-
         Role::query()
             ->where('name', 'Admin')
             ->where('guard_name', 'sanctum')
             ->get()
-            ->each(fn (Role $role) => $role->syncPermissions($sanctumPermissionNames));
+            ->each(fn (Role $role) => RolePermissionService::syncAdminRole($role));
     }
 }
 

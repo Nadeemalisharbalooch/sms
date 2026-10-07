@@ -9,6 +9,7 @@ use App\Http\Resources\Institute\RoleResource;
 use App\Models\InstituteUser;
 use App\Services\NotificationService;
 use App\Services\ResponseService;
+use App\Services\RolePermissionService;
 use Illuminate\Http\Request;
 use Spatie\Permission\Models\Role;
 
@@ -69,11 +70,7 @@ public function store(StoreRoleRequest $request)
 
     // Admin roles always receive the full permission set for their guard.
     if (strcasecmp($role->name, 'Admin') === 0) {
-        $permissionNames = \Spatie\Permission\Models\Permission::query()
-            ->where('guard_name', $guardName)
-            ->pluck('name')
-            ->all();
-        $role->syncPermissions($permissionNames);
+        RolePermissionService::syncAdminRole($role);
     } elseif (array_key_exists('permissions', $validated)) {
         // Normalize permissions similar to update method
         $permissionIds = $validated['permissions'] ?? [];
@@ -152,12 +149,7 @@ public function store(StoreRoleRequest $request)
         $role->update(collect($validated)->only(['name', 'guard_name'])->all());
 
         if (strcasecmp($role->name, 'Admin') === 0) {
-            $permissionNames = \Spatie\Permission\Models\Permission::query()
-                ->where('guard_name', $role->guard_name)
-                ->pluck('name')
-                ->all();
-
-            $role->syncPermissions($permissionNames);
+            RolePermissionService::syncAdminRole($role);
         } elseif (array_key_exists('permissions', $validated)) {
             // UpdateRoleRequest validates `permissions.*` as permission IDs.
             // Spatie's syncPermissions expects permission names by default.
