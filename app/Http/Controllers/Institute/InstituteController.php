@@ -9,6 +9,8 @@ use App\Http\Requests\Institute\UpdateInstituteRequest;
 use App\Http\Resources\Institute\InstituteResource;
 use App\Models\Institute;
 use App\Models\AcademicSession;
+use App\Models\AcademicClass;
+use App\Models\AcademicSection;
 use App\Models\InstituteSubscription;
 use App\Models\InstituteUser;
 use App\Models\Plan;
@@ -85,6 +87,8 @@ class InstituteController extends Controller
             $data = $request->validated();
             $academicSession = $data['academic_session'];
             unset($data['academic_session']);
+            $academicStructure = $data['academic_structure'] ?? [];
+            unset($data['academic_structure'], $data['institute'], $data['settings'], $data['session']);
 
             $data = $this->handleFileUploads($data);
 
@@ -97,6 +101,27 @@ class InstituteController extends Controller
                 'end_date' => $academicSession['end_date'],
                 'is_active' => true,
             ]);
+
+            foreach ($academicStructure as $classIndex => $classData) {
+                $className = $classData['class_name'];
+                $academicClass = AcademicClass::create([
+                    'institute_id' => $institute->id,
+                    'name' => $className,
+                    'code' => $this->uniqueAcademicCode($institute->id, $className, 'classes', 'institute_id'),
+                    'display_order' => $classIndex,
+                    'is_active' => true,
+                ]);
+
+                foreach ($classData['sections'] as $sectionIndex => $sectionName) {
+                    AcademicSection::create([
+                        'class_id' => $academicClass->id,
+                        'name' => $sectionName,
+                        'code' => $this->uniqueAcademicCode($academicClass->id, $sectionName, 'sections', 'class_id'),
+                        'display_order' => $sectionIndex,
+                        'is_active' => true,
+                    ]);
+                }
+            }
 
             $user->update([
                 'is_institute' => true,
@@ -141,6 +166,21 @@ class InstituteController extends Controller
             new InstituteResource($institute->load('academicSessions')),
             'Institute created successfully'
         );
+    }
+
+    private function uniqueAcademicCode(int $parentId, string $name, string $table, string $parentColumn): string
+    {
+        $base = \Illuminate\Support\Str::upper(\Illuminate\Support\Str::slug($name)) ?: 'ITEM';
+        $base = \Illuminate\Support\Str::substr($base, 0, 44);
+        $code = $base;
+        $suffix = 2;
+
+        while (DB::table($table)->where($parentColumn, $parentId)->where('code', $code)->exists()) {
+            $code = \Illuminate\Support\Str::substr($base, 0, 50 - strlen((string) $suffix) - 1).'-'.$suffix;
+            $suffix++;
+        }
+
+        return $code;
     }
 
     /**

@@ -17,6 +17,7 @@ class InstituteResource extends JsonResource
         return [
             'public_id' => $this->public_id,
             'name' => $this->name,
+            'short_name' => $this->short_name,
             'email' => $this->email,
             'phone' => $this->phone,
             'address' => $this->address,
@@ -25,6 +26,9 @@ class InstituteResource extends JsonResource
             'favicon' => $this->favicon_url,
             'favicon_path' => $this->favicon,
             'attendance_mode' => $this->attendance_mode,
+            'currency_symbol' => $this->currency_symbol,
+            'timezone' => $this->timezone,
+            'default_fee_due_date' => $this->default_fee_due_date,
             'is_active' => $this->is_active,
             'created_at' => $this->created_at,
             'academic_sessions' => AcademicSessionResource::collection($this->whenLoaded('academicSessions')),

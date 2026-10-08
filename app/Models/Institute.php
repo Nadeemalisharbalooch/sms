@@ -13,12 +13,16 @@ class Institute extends Model
     protected $fillable = [
         'user_id',
         'name',
+        'short_name',
         'email',
         'phone',
         'address',
         'logo',
         'favicon',
         'attendance_mode',
+        'currency_symbol',
+        'timezone',
+        'default_fee_due_date',
         'is_active',
     ];
 

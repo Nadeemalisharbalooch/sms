@@ -8,6 +8,25 @@ use Illuminate\Validation\Rule;
 
 class StoreInstituteRequest extends FormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        if (! $this->has('institute')) {
+            return;
+        }
+
+        $institute = (array) $this->input('institute', []);
+        $settings = (array) $this->input('settings', []);
+        $session = (array) $this->input('session', []);
+
+        // The new API groups fields for readability; keep normalized flat
+        // values for the existing persistence and upload handling paths.
+        $this->merge([
+            ...$institute,
+            ...$settings,
+            'academic_session' => $session,
+        ]);
+    }
+
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -25,6 +44,7 @@ class StoreInstituteRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
+            'short_name' => ['nullable', 'string', 'max:50'],
             'academic_session' => ['required', 'array'],
             'academic_session.name' => ['required', 'string', 'max:100'],
             'academic_session.start_date' => ['required', 'date_format:Y-m-d'],
@@ -67,6 +87,14 @@ class StoreInstituteRequest extends FormRequest
                 'required',
                 Rule::in(['class', 'subject'])
             ],
+            'currency_symbol' => ['required_with:settings', 'string', 'max:10'],
+            'timezone' => ['required_with:settings', 'timezone'],
+            'default_fee_due_date' => ['required_with:settings', 'integer', 'between:1,31'],
+            'academic_structure' => ['sometimes', 'array'],
+            'academic_structure.*' => ['required', 'array'],
+            'academic_structure.*.class_name' => ['required', 'string', 'max:100', 'distinct'],
+            'academic_structure.*.sections' => ['required', 'array'],
+            'academic_structure.*.sections.*' => ['required', 'string', 'max:100', 'distinct'],
 
             'role_ids' => [
                 'sometimes',
