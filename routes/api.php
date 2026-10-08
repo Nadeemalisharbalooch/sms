@@ -10,6 +10,14 @@ Route::middleware('auth:sanctum')->group(function () {
         return $request->user();
     });
 
+    Route::get('/user/email-verified', function (Request $request) {
+        return response()->json($request->user()->email_verified_at !== null);
+    });
+
+    Route::get('/user/is-institute', function (Request $request) {
+        return response()->json((bool) $request->user()->is_institute);
+    });
+
     // Route for the current user to update their own information
     Route::put('user/current', [UserController::class, 'updateCurrent']);
 });

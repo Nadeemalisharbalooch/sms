@@ -27,8 +27,7 @@ return [
     'fee-setup' => ['view', 'manage'], 
     'fee-vouchers' => ['view', 'generate', 'update', 'delete'],
     // Merged: ledger, student-vouchers, collect
-    'fee-collections' => ['collect', 'reports'], 
-
+    'fee-collections' => ['collect', 'reports'],
     // 7. Timetable
     // Merged: setup, swap, update into 'manage'
     'timetable' => ['view', 'manage', 'generate'], 
