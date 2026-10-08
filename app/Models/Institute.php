@@ -14,6 +14,7 @@ class Institute extends Model
         'user_id',
         'name',
         'short_name',
+        'referral_id',
         'email',
         'phone',
         'address',

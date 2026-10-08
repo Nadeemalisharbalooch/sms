@@ -18,6 +18,7 @@ class InstituteResource extends JsonResource
             'public_id' => $this->public_id,
             'name' => $this->name,
             'short_name' => $this->short_name,
+            'referral_id' => $this->referral_id,
             'email' => $this->email,
             'phone' => $this->phone,
             'address' => $this->address,

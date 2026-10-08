@@ -29,6 +29,7 @@ class EditCurrentInstituteRequest extends FormRequest
 
         return [
             'name' => ['sometimes', 'required', 'string', 'max:255'],
+            'referral_id' => ['sometimes', 'nullable', 'string', 'max:100'],
 
             'email' => [
                 'sometimes',

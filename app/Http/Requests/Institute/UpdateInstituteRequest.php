@@ -24,6 +24,7 @@ class UpdateInstituteRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
+            'referral_id' => ['sometimes', 'nullable', 'string', 'max:100'],
 
             'email' => [
                 'nullable',
