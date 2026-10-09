@@ -1,7 +1,13 @@
 import { Head, useForm } from '@inertiajs/react';
+import { Database } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 export default function Login() {
-    const { data, setData, post, processing, errors } = useForm({ email: '', password: '', remember: false });
+    const { data, setData, post, processing, errors } = useForm({ email: '', password: '', remember: true });
 
     function submit(event) {
         event.preventDefault();
@@ -11,27 +17,55 @@ export default function Login() {
     return (
         <>
             <Head title="Log in" />
-            <main className="min-h-screen bg-gray-100 flex items-center justify-center p-6">
-                <form onSubmit={submit} className="w-full max-w-sm rounded-lg bg-white p-6 shadow-sm">
-                    <h1 className="text-xl font-semibold text-gray-900">Log in</h1>
-                    <p className="mt-1 text-sm text-gray-600">Enter your account details to continue.</p>
-                    <div className="mt-6">
-                        <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
-                        <input id="email" type="email" value={data.email} onChange={(event) => setData('email', event.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" autoComplete="username" autoFocus required />
-                        {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email}</p>}
-                    </div>
-                    <div className="mt-4">
-                        <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
-                        <input id="password" type="password" value={data.password} onChange={(event) => setData('password', event.target.value)} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" autoComplete="current-password" required />
-                    </div>
-                    <label className="mt-4 flex items-center gap-2 text-sm text-gray-600">
-                        <input type="checkbox" checked={data.remember} onChange={(event) => setData('remember', event.target.checked)} className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                        Remember me
-                    </label>
-                    <button type="submit" disabled={processing} className="mt-6 w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50">
-                        {processing ? 'Logging in…' : 'Log in'}
-                    </button>
-                </form>
+            <main className="flex min-h-screen items-center justify-center bg-muted/40 p-6">
+                <Card className="w-full max-w-sm">
+                    <CardHeader className="text-center">
+                        <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+                            <Database className="size-6" strokeWidth={2} />
+                        </div>
+                        <CardTitle className="text-xl">Welcome back</CardTitle>
+                        <CardDescription>Sign in to the super admin panel to continue.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <form onSubmit={submit} className="space-y-4">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="email">Email</Label>
+                                <Input
+                                    id="email"
+                                    type="email"
+                                    value={data.email}
+                                    onChange={(event) => setData('email', event.target.value)}
+                                    autoComplete="username"
+                                    autoFocus
+                                    required
+                                    placeholder="admin@sms.com"
+                                />
+                                {errors.email && <p className="text-xs font-medium text-destructive">{errors.email}</p>}
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="password">Password</Label>
+                                <Input
+                                    id="password"
+                                    type="password"
+                                    value={data.password}
+                                    onChange={(event) => setData('password', event.target.value)}
+                                    autoComplete="current-password"
+                                    required
+                                />
+                            </div>
+                            <label className="flex items-center gap-2.5">
+                                <Checkbox
+                                    checked={data.remember}
+                                    onCheckedChange={(checked) => setData('remember', Boolean(checked))}
+                                />
+                                <span className="text-sm text-muted-foreground">Remember me</span>
+                            </label>
+                            <Button type="submit" disabled={processing} size="lg" className="w-full">
+                                {processing ? 'Signing in…' : 'Sign in'}
+                            </Button>
+                        </form>
+                    </CardContent>
+                </Card>
             </main>
         </>
     );

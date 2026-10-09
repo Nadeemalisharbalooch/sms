@@ -1,6 +1,16 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { useState } from 'react';
+import { useState } from 'react';import { Building2, Camera, Pencil, Plus, Trash2, Users } from 'lucide-react';
 import AdminLayout from '../../Layouts/AdminLayout';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
 const emptyInstitute = {
     name: '',
@@ -64,6 +74,7 @@ export default function InstitutesIndex({ user, institutes, plans }) {
             plan_id: institute.subscription?.plan_id ? String(institute.subscription.plan_id) : '',
             subscription_status: institute.subscription?.status || 'trialing',
         });
+        document.getElementById('institute-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function closeForm() {
@@ -71,128 +82,253 @@ export default function InstitutesIndex({ user, institutes, plans }) {
         reset();
     }
 
-    function show(institute) {
-        // Add your show logic here - e.g., show modal or navigate to detail page
-        alert(`Viewing ${institute.name}\nEmail: ${institute.email}\nPhone: ${institute.phone}\nAddress: ${institute.address}`);
-    }
-
     function remove(institute) {
-        if (window.confirm(`Delete ${institute.name}?`)) {
-            router.delete(route('institute.destroy', institute.public_id));
-        }
+        router.delete(route('institute.destroy', institute.public_id));
     }
 
     return (
         <AdminLayout user={user} title="Institutes" onLogout={() => router.post(route('logout.web'))}>
             <Head title="Institutes" />
-            <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-                <section className="overflow-hidden rounded-lg bg-white shadow-sm dark:bg-gray-800">
-                    <div className="border-b border-gray-200 px-6 py-4 dark:border-gray-700">
-                        <h2 className="font-semibold text-gray-900 dark:text-white">All Institutes</h2>
-                    </div>
+            <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
+                <Card size="sm" className="gap-0 py-0">
+                    <CardHeader className="border-b px-5 py-4">
+                        <CardTitle className="flex items-center gap-2">
+                            <Building2 className="size-4.5 text-muted-foreground" />
+                            All Institutes
+                        </CardTitle>
+                        <CardDescription>
+                            {institutes.length} institute{institutes.length === 1 ? '' : 's'} registered on the platform.
+                        </CardDescription>
+                    </CardHeader>
                     {institutes.length ? (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-sm">
-                                <thead className="bg-gray-50 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
-                                    <tr><th className="px-6 py-3">Logo</th><th className="px-6 py-3">Name</th><th className="px-6 py-3">Email</th><th className="px-6 py-3">Plan</th><th className="px-6 py-3">Invoice</th><th className="px-6 py-3">Mode</th><th className="px-6 py-3">Status</th><th className="px-6 py-3">Actions</th></tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                    {institutes.map((institute) => {
-                                        const logoSrc = institute.logo_url || (institute.logo ? (institute.logo.startsWith('http://') || institute.logo.startsWith('https://') || institute.logo.startsWith('/') ? institute.logo : `/storage/${institute.logo}`) : null);
-
-                                        return (
-                                            <tr key={institute.public_id} className="text-gray-700 dark:text-gray-200">
-                                                <td className="px-6 py-4">
-                                                    {logoSrc ? (
-                                                        <img
-                                                            src={logoSrc}
-                                                            alt="logo"
-                                                            className="h-8 w-8 rounded object-cover"
-                                                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                                                        />
-                                                    ) : (
-                                                        <span className="text-gray-400 text-xs">No logo</span>
-                                                    )}
-                                                </td>
-                                                <td className="px-6 py-4 font-medium">{institute.name}</td>
-                                                <td className="px-6 py-4">{institute.email || '-'}</td>
-                                            <td className="px-6 py-4"><p>{institute.subscription?.plan?.name || '-'}</p>{institute.subscription && <p className="mt-1 text-xs capitalize text-gray-500">{institute.subscription.status}</p>}</td>
-                                            <td className="px-6 py-4 text-xs">
-                                                {institute.subscription?.invoice ? <>
-                                                    <p className="font-medium text-gray-700 dark:text-gray-200">{institute.subscription.invoice.invoice_number}</p>
-                                                    <p className="mt-1">PKR {institute.subscription.invoice.amount}</p>
-                                                    <p className="mt-1 capitalize text-gray-500">{institute.subscription.invoice.status.replace('_', ' ')}</p>
-                                                    {institute.subscription.invoice.due_date && <p className="mt-1 text-gray-500">Due: {institute.subscription.invoice.due_date}</p>}
-                                                    {institute.subscription.invoice.payment_submitted_at && <p className="mt-1 text-gray-500">Submitted: {new Date(institute.subscription.invoice.payment_submitted_at).toLocaleString()}</p>}
-                                                    {institute.subscription.invoice.payment_method && <p className="mt-1 capitalize text-gray-500">Method: {institute.subscription.invoice.payment_method}</p>}
-                                                    {institute.subscription.invoice.payment_reference && <p className="mt-1 break-all text-gray-500">Reference: {institute.subscription.invoice.payment_reference}</p>}
-                                                    {institute.subscription.invoice.notes && <p className="mt-1 break-words text-gray-500">Note: {institute.subscription.invoice.notes}</p>}
-                                                    {institute.subscription.invoice.payment_screenshot_url && <a href={institute.subscription.invoice.payment_screenshot_url} target="_blank" rel="noreferrer" className="mt-1 inline-block text-indigo-600 hover:text-indigo-800 dark:text-indigo-400">View screenshot</a>}
-                                                </> : <span className="text-gray-400">No invoice</span>}
-                                            </td>
-                                            <td className="px-6 py-4 capitalize">{institute.attendance_mode}</td>
-                                            <td className="px-6 py-4">
-                                                <span className={"px-2 py-1 text-xs rounded " + (institute.is_active ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300" : "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300")}>
-                                                    {institute.is_active ? 'Active' : 'Inactive'}
-                                                </span>
-                                            </td>
-                                            <td className="space-x-3 px-6 py-4 whitespace-nowrap">
-                                                <button type="button" onClick={() => show(institute)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400">Show</button>
-                                                <button type="button" onClick={() => startEdit(institute)} className="text-indigo-600 hover:text-indigo-800 dark:text-indigo-400">Edit</button>
-                                                {institute.subscription?.invoice?.status === 'verification_pending' && <button type="button" onClick={() => router.put(route('subscription-invoices.verify', institute.subscription.invoice.id))} className="text-green-600 hover:text-green-800 dark:text-green-400">Verify Payment</button>}
-                                                <button type="button" onClick={() => remove(institute)} className="text-red-600 hover:text-red-800 dark:text-red-400">Delete</button>
-                                            </td>
-                                        </tr>
-                                    ); })}
-                                </tbody>
-                            </table>
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                    <TableHead className="px-5">Institute</TableHead>
+                                    <TableHead className="px-4">Plan</TableHead>
+                                    <TableHead className="px-4">Invoice</TableHead>
+                                    <TableHead className="px-4">Status</TableHead>
+                                    <TableHead className="px-4 text-right">Actions</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {institutes.map((institute) => (
+                                    <TableRow key={institute.public_id}>
+                                        <TableCell className="px-5 py-4">
+                                            <div className="flex items-center gap-3">
+                                                <InstituteAvatar institute={institute} />
+                                                <div className="min-w-0 leading-tight">
+                                                    <p className="truncate font-medium text-foreground">{institute.name}</p>
+                                                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{institute.email || 'No email'}</p>
+                                                </div>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="px-4 py-4">
+                                            <div className="leading-tight">
+                                                <p className="text-sm font-medium">{institute.subscription?.plan?.name || '—'}</p>
+                                                {institute.subscription && (
+                                                    <p className="mt-0.5 text-xs capitalize text-muted-foreground">{institute.subscription.status}</p>
+                                                )}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="px-4 py-4">
+                                            <InvoiceSummary invoice={institute.subscription?.invoice} />
+                                        </TableCell>
+                                        <TableCell className="px-4 py-4">
+                                            <Badge variant={institute.is_active ? 'secondary' : 'outline'} className={institute.is_active ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'text-muted-foreground'}>
+                                                {institute.is_active ? 'Active' : 'Inactive'}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="px-4 py-4 text-right">
+                                            <div className="flex justify-end gap-1">
+                                                <Button type="button" variant="ghost" size="icon-sm" title="Edit" onClick={() => startEdit(institute)}>
+                                                    <Pencil className="size-3.5" />
+                                                </Button>
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button type="button" variant="ghost" size="icon-sm" title="Delete" className="text-destructive hover:text-destructive">
+                                                            <Trash2 className="size-3.5" />
+                                                        </Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>Delete {institute.name}?</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                This will permanently remove the institute and its data. This action cannot be undone.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                            <AlertDialogAction variant="destructive" onClick={() => remove(institute)}>
+                                                                Delete
+                                                            </AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
+                            <div className="flex size-12 items-center justify-center rounded-full bg-muted">
+                                <Building2 className="size-6 text-muted-foreground" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium">No institutes yet</p>
+                                <p className="mt-1 text-sm text-muted-foreground">Add your first institute using the form on the right.</p>
+                            </div>
                         </div>
-                    ) : <p className="p-6 text-sm text-gray-600 dark:text-gray-300">No institutes have been added yet.</p>}
-                </section>
+                    )}
+                </Card>
 
-                <form onSubmit={submit} className="h-fit rounded-lg bg-white p-6 shadow-sm dark:bg-gray-800">
-                    <div className="flex items-center justify-between">
-                        <h2 className="font-semibold text-gray-900 dark:text-white">{editing ? 'Edit Institute' : 'New Institute'}</h2>
-                        {editing && <button type="button" onClick={closeForm} className="text-sm text-gray-600 dark:text-gray-300">Cancel</button>}
-                    </div>
-                    <Field label="Name" error={errors.name}><input value={data.name} onChange={(event) => setData('name', event.target.value)} required className="input" /></Field>
-                    <Field label="Email" error={errors.email}><input type="email" value={data.email} onChange={(event) => setData('email', event.target.value)} className="input" /></Field>
-                    <Field label="Phone" error={errors.phone}><input value={data.phone} onChange={(event) => setData('phone', event.target.value)} className="input" /></Field>
-                    <Field label="Address" error={errors.address}><textarea value={data.address} onChange={(event) => setData('address', event.target.value)} className="input" rows="3" /></Field>
-                    <Field label="Logo" error={errors.logo}><input type="file" accept="image/*" onChange={(event) => setData('logo', event.target.files[0] || null)} className="input" /></Field>
-                    <Field label="Favicon" error={errors.favicon}><input type="file" accept="image/*" onChange={(event) => setData('favicon', event.target.files[0] || null)} className="input" /></Field>
-                    <Field label="Attendance mode" error={errors.attendance_mode}><select value={data.attendance_mode} onChange={(event) => setData('attendance_mode', event.target.value)} className="input"><option value="class">Class</option><option value="subject">Subject</option></select></Field>
-                    <div className="hidden">
-                        <h3 className="mb-4 text-sm font-medium text-gray-700 dark:text-gray-200">Package & Subscription</h3>
-                        <Field label="Plan" error={errors.plan_id}>
-                            <select value={data.plan_id} onChange={(event) => setData('plan_id', event.target.value)} className="input">
-                                <option value="">No plan assigned</option>
-                                {plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name} — {plan.price}/{plan.billing_interval}</option>)}
-                            </select>
-                        </Field>
-                        <Field label="Subscription status" error={errors.subscription_status}>
-                            <select value={data.subscription_status} onChange={(event) => setData('subscription_status', event.target.value)} className="input" disabled={!data.plan_id}>
-                                <option value="trialing">Trial</option>
-                                <option value="active">Active / Approved</option>
-                                <option value="expired">Expired</option>
-                                <option value="canceled">Canceled</option>
-                            </select>
-                        </Field>
-                    </div>
-                    <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-6">
-                        <h3 className="mb-4 text-sm font-medium text-gray-700 dark:text-gray-200">Institute User</h3>
-                        <Field label="User Name" error={errors.user_name}><input value={data.user_name} onChange={(event) => setData('user_name', event.target.value)} className="input" placeholder="Same as institute name" /></Field>
-                        <Field label="User Email" error={errors.user_email}><input type="email" value={data.user_email} onChange={(event) => setData('user_email', event.target.value)} className="input" placeholder="Same as institute email" /></Field>
-                        <Field label="User Phone" error={errors.user_phone}><input value={data.user_phone} onChange={(event) => setData('user_phone', event.target.value)} className="input" placeholder="Same as institute phone" /></Field>
-                        <Field label={editing ? 'New Password (optional)' : 'User Password'} error={errors.user_password}><input type="password" value={data.user_password} onChange={(event) => setData('user_password', event.target.value)} className="input" required={!editing} /></Field>
-                    </div>
-                    <button type="submit" disabled={processing} className="mt-5 w-full rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50 dark:bg-indigo-600 dark:hover:bg-indigo-500">{processing ? 'Saving...' : editing ? 'Update Institute' : 'Create Institute'}</button>
+                <form id="institute-form" onSubmit={submit} className="h-fit">
+                    <Card size="sm" className="gap-0 py-0">
+                        <CardHeader className="border-b px-5 py-4">
+                            <CardTitle className="flex items-center gap-2">
+                                {editing ? <Pencil className="size-4.5 text-muted-foreground" /> : <Plus className="size-4.5 text-muted-foreground" />}
+                                {editing ? 'Edit Institute' : 'New Institute'}
+                            </CardTitle>
+                            {editing && (
+                                <CardDescription>Editing <span className="font-medium text-foreground">{editing.name}</span></CardDescription>
+                            )}
+                        </CardHeader>
+                        <CardContent className="px-5 pb-5 pt-4">
+                            {editing && (
+                                <Button type="button" variant="outline" size="sm" onClick={closeForm} className="mb-3">
+                                    Cancel editing
+                                </Button>
+                            )}
+
+                            <div className="space-y-3">
+                                <Field label="Name" error={errors.name}>
+                                    <Input value={data.name} onChange={(event) => setData('name', event.target.value)} required placeholder="e.g. City Grammar School" />
+                                </Field>
+                                <Field label="Email" error={errors.email}>
+                                    <Input type="email" value={data.email} onChange={(event) => setData('email', event.target.value)} placeholder="admin@school.com" />
+                                </Field>
+                                <Field label="Phone" error={errors.phone}>
+                                    <Input value={data.phone} onChange={(event) => setData('phone', event.target.value)} placeholder="+92 300 0000000" />
+                                </Field>
+                                <Field label="Address" error={errors.address}>
+                                    <Textarea value={data.address} onChange={(event) => setData('address', event.target.value)} rows={2} />
+                                </Field>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Field label="Logo" error={errors.logo}>
+                                        <Input type="file" accept="image/*" onChange={(event) => setData('logo', event.target.files[0] || null)} />
+                                    </Field>
+                                    <Field label="Favicon" error={errors.favicon}>
+                                        <Input type="file" accept="image/*" onChange={(event) => setData('favicon', event.target.files[0] || null)} />
+                                    </Field>
+                                </div>
+                                <Field label="Attendance mode" error={errors.attendance_mode}>
+                                    <Select value={data.attendance_mode} onValueChange={(value) => setData('attendance_mode', value)}>
+                                        <SelectTrigger className="w-full">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="class">Class</SelectItem>
+                                            <SelectItem value="subject">Subject</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </Field>
+                            </div>
+
+                            <Separator className="my-5" />
+
+                            <h3 className="mb-3 flex items-center gap-2 text-sm font-medium">
+                                <Users className="size-4 text-muted-foreground" />
+                                Institute User
+                            </h3>
+                            <div className="space-y-3">
+                                <Field label="User Name" error={errors.user_name}>
+                                    <Input value={data.user_name} onChange={(event) => setData('user_name', event.target.value)} placeholder="Same as institute name" />
+                                </Field>
+                                <Field label="User Email" error={errors.user_email}>
+                                    <Input type="email" value={data.user_email} onChange={(event) => setData('user_email', event.target.value)} placeholder="Same as institute email" />
+                                </Field>
+                                <Field label="User Phone" error={errors.user_phone}>
+                                    <Input value={data.user_phone} onChange={(event) => setData('user_phone', event.target.value)} placeholder="Same as institute phone" />
+                                </Field>
+                                <Field label={editing ? 'New Password (optional)' : 'User Password'} error={errors.user_password}>
+                                    <Input type="password" value={data.user_password} onChange={(event) => setData('user_password', event.target.value)} required={!editing} />
+                                </Field>
+                            </div>
+
+                            <Button
+                                type="submit"
+                                disabled={processing}
+                                className="mt-5 w-full"
+                                size="lg"
+                            >
+                                {processing ? 'Saving...' : editing ? 'Update Institute' : 'Create Institute'}
+                            </Button>
+                        </CardContent>
+                    </Card>
                 </form>
             </div>
         </AdminLayout>
     );
 }
 
+function InstituteAvatar({ institute }) {
+    const logoSrc = institute.logo_url || (institute.logo ? (institute.logo.startsWith('http://') || institute.logo.startsWith('https://') || institute.logo.startsWith('/') ? institute.logo : `/storage/${institute.logo}`) : null);
+
+    if (logoSrc) {
+        return (
+            <img
+                src={logoSrc}
+                alt="logo"
+                className="size-10 rounded-lg object-cover ring-1 ring-foreground/10"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+        );
+    }
+
+    return (
+        <div className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+            <Camera className="size-4" />
+        </div>
+    );
+}
+
+function InvoiceSummary({ invoice }) {
+    if (!invoice) {
+        return <span className="text-xs text-muted-foreground">No invoice yet</span>;
+    }
+
+    const badgeVariant = {
+        paid: 'default',
+        verification_pending: 'secondary',
+        open: 'outline',
+        void: 'ghost',
+    }[invoice.status] || 'outline';
+
+    return (
+        <div className="leading-tight">
+            <p className="font-mono text-xs font-medium text-foreground">{invoice.invoice_number}</p>
+            <p className="mt-1 text-xs text-muted-foreground">PKR {invoice.amount}</p>
+            <div className="mt-1.5 flex items-center gap-2">
+                <Badge variant={badgeVariant} className="text-[0.65rem] capitalize">{invoice.status.replace('_', ' ')}</Badge>
+                {invoice.status === 'verification_pending' && (
+                    <Button type="button" size="xs" variant="outline" className="text-emerald-600 dark:text-emerald-400"
+                        onClick={() => router.put(route('subscription-invoices.verify', invoice.id))}>
+                        Verify
+                    </Button>
+                )}
+            </div>
+        </div>
+    );
+}
+
 function Field({ label, error, children }) {
-    return <label className="mt-4 block text-sm font-medium text-gray-700 dark:text-gray-200">{label}{children}{error && <span className="mt-1 block text-xs text-red-600">{error}</span>}</label>;
+    return (
+        <div className="space-y-1.5">
+            <Label>{label}</Label>
+            {children}
+            {error && <p className="text-xs font-medium text-destructive">{error}</p>}
+        </div>
+    );
 }

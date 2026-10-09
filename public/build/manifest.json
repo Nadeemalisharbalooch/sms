@@ -1,17 +1,52 @@
 {
-  "_AdminLayout-2JVQpu64.js": {
-    "file": "assets/AdminLayout-2JVQpu64.js",
+  "_AdminLayout-DWkFHAV2.js": {
+    "file": "assets/AdminLayout-DWkFHAV2.js",
     "name": "AdminLayout",
     "imports": [
-      "resources/js/app.jsx"
+      "resources/js/app.jsx",
+      "_card-B4yWOGSK.js"
     ],
     "dynamicImports": [
       "resources/js/echo.js"
     ]
   },
+  "_alert-dialog-GjgPTdIH.js": {
+    "file": "assets/alert-dialog-GjgPTdIH.js",
+    "name": "alert-dialog",
+    "imports": [
+      "resources/js/app.jsx",
+      "_select-DOZAmyUN.js",
+      "_input-C2cOwRlO.js",
+      "_card-B4yWOGSK.js"
+    ]
+  },
+  "_card-B4yWOGSK.js": {
+    "file": "assets/card-B4yWOGSK.js",
+    "name": "card",
+    "imports": [
+      "resources/js/app.jsx"
+    ]
+  },
+  "_checkbox-c37R4Iq4.js": {
+    "file": "assets/checkbox-c37R4Iq4.js",
+    "name": "checkbox",
+    "imports": [
+      "resources/js/app.jsx",
+      "_input-C2cOwRlO.js",
+      "_card-B4yWOGSK.js"
+    ]
+  },
   "_fonts-DkuEHybc.css": {
     "file": "assets/fonts-DkuEHybc.css",
     "src": "_fonts-DkuEHybc.css"
+  },
+  "_input-C2cOwRlO.js": {
+    "file": "assets/input-C2cOwRlO.js",
+    "name": "input",
+    "imports": [
+      "resources/js/app.jsx",
+      "_card-B4yWOGSK.js"
+    ]
   },
   "_instrument-sans-400-normal-D1W7dsQl.woff": {
     "file": "assets/instrument-sans-400-normal-D1W7dsQl.woff",
@@ -61,86 +96,183 @@
     "file": "assets/instrument-sans-600-normal-DMks36a2.woff",
     "src": "_instrument-sans-600-normal-DMks36a2.woff"
   },
+  "_label-1ktPDlyr.js": {
+    "file": "assets/label-1ktPDlyr.js",
+    "name": "label",
+    "imports": [
+      "resources/js/app.jsx",
+      "_card-B4yWOGSK.js"
+    ]
+  },
+  "_search-cyr8bSEV.js": {
+    "file": "assets/search-cyr8bSEV.js",
+    "name": "search",
+    "imports": [
+      "_card-B4yWOGSK.js"
+    ]
+  },
+  "_select-DOZAmyUN.js": {
+    "file": "assets/select-DOZAmyUN.js",
+    "name": "select",
+    "imports": [
+      "resources/js/app.jsx",
+      "_input-C2cOwRlO.js",
+      "_AdminLayout-DWkFHAV2.js",
+      "_card-B4yWOGSK.js"
+    ]
+  },
+  "_table-CL4E51zA.js": {
+    "file": "assets/table-CL4E51zA.js",
+    "name": "table",
+    "imports": [
+      "resources/js/app.jsx",
+      "_card-B4yWOGSK.js"
+    ]
+  },
+  "_users-DCuF6_Aj.js": {
+    "file": "assets/users-DCuF6_Aj.js",
+    "name": "users",
+    "imports": [
+      "_card-B4yWOGSK.js"
+    ]
+  },
+  "node_modules/@fontsource-variable/geist/files/geist-cyrillic-ext-wght-normal.woff2": {
+    "file": "assets/geist-cyrillic-ext-wght-normal-DjL33-gN.woff2",
+    "src": "node_modules/@fontsource-variable/geist/files/geist-cyrillic-ext-wght-normal.woff2"
+  },
+  "node_modules/@fontsource-variable/geist/files/geist-cyrillic-wght-normal.woff2": {
+    "file": "assets/geist-cyrillic-wght-normal-BEAKL7Jp.woff2",
+    "src": "node_modules/@fontsource-variable/geist/files/geist-cyrillic-wght-normal.woff2"
+  },
+  "node_modules/@fontsource-variable/geist/files/geist-latin-ext-wght-normal.woff2": {
+    "file": "assets/geist-latin-ext-wght-normal-DC-KSUi6.woff2",
+    "src": "node_modules/@fontsource-variable/geist/files/geist-latin-ext-wght-normal.woff2"
+  },
+  "node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2": {
+    "file": "assets/geist-latin-wght-normal-BgDaEnEv.woff2",
+    "src": "node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2"
+  },
+  "node_modules/@fontsource-variable/geist/files/geist-vietnamese-wght-normal.woff2": {
+    "file": "assets/geist-vietnamese-wght-normal-6IgcOCM7.woff2",
+    "src": "node_modules/@fontsource-variable/geist/files/geist-vietnamese-wght-normal.woff2"
+  },
   "resources/css/app.css": {
-    "file": "assets/app-BFXlP5yR.css",
+    "file": "assets/app-DCu63fxW.css",
     "name": "app",
     "names": [
       "app.css"
     ],
     "src": "resources/css/app.css",
-    "isEntry": true
+    "isEntry": true,
+    "assets": [
+      "assets/geist-cyrillic-ext-wght-normal-DjL33-gN.woff2",
+      "assets/geist-cyrillic-wght-normal-BEAKL7Jp.woff2",
+      "assets/geist-vietnamese-wght-normal-6IgcOCM7.woff2",
+      "assets/geist-latin-ext-wght-normal-DC-KSUi6.woff2",
+      "assets/geist-latin-wght-normal-BgDaEnEv.woff2"
+    ]
   },
   "resources/js/Pages/Auth/Login.jsx": {
-    "file": "assets/Login-CO5cNeI6.js",
+    "file": "assets/Login-ClOL0ZQA.js",
     "name": "Login",
     "src": "resources/js/Pages/Auth/Login.jsx",
     "isDynamicEntry": true,
     "imports": [
-      "resources/js/app.jsx"
+      "resources/js/app.jsx",
+      "_input-C2cOwRlO.js",
+      "_checkbox-c37R4Iq4.js",
+      "_card-B4yWOGSK.js",
+      "_label-1ktPDlyr.js"
     ]
   },
   "resources/js/Pages/Dashboard.jsx": {
-    "file": "assets/Dashboard-C-I3TJXT.js",
+    "file": "assets/Dashboard-Dkfsa0Yg.js",
     "name": "Dashboard",
     "src": "resources/js/Pages/Dashboard.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AdminLayout-2JVQpu64.js"
+      "_AdminLayout-DWkFHAV2.js",
+      "_card-B4yWOGSK.js",
+      "_users-DCuF6_Aj.js"
     ]
   },
   "resources/js/Pages/Institutes/Index.jsx": {
-    "file": "assets/Index-C_jWQd5R.js",
+    "file": "assets/Index-CJoypIkL.js",
     "name": "Index",
     "src": "resources/js/Pages/Institutes/Index.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AdminLayout-2JVQpu64.js"
+      "_select-DOZAmyUN.js",
+      "_input-C2cOwRlO.js",
+      "_alert-dialog-GjgPTdIH.js",
+      "_AdminLayout-DWkFHAV2.js",
+      "_card-B4yWOGSK.js",
+      "_label-1ktPDlyr.js",
+      "_users-DCuF6_Aj.js",
+      "_table-CL4E51zA.js"
     ]
   },
   "resources/js/Pages/Notifications/Index.jsx": {
-    "file": "assets/Index-CBWtqlba.js",
+    "file": "assets/Index-CK3-4SEL.js",
     "name": "Index",
     "src": "resources/js/Pages/Notifications/Index.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AdminLayout-2JVQpu64.js"
+      "_select-DOZAmyUN.js",
+      "_input-C2cOwRlO.js",
+      "_AdminLayout-DWkFHAV2.js",
+      "_card-B4yWOGSK.js",
+      "_search-cyr8bSEV.js"
     ]
   },
   "resources/js/Pages/Plans/Index.jsx": {
-    "file": "assets/Index-Fdnrp_Gw.js",
+    "file": "assets/Index-B0MxMNZA.js",
     "name": "Index",
     "src": "resources/js/Pages/Plans/Index.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AdminLayout-2JVQpu64.js"
+      "_select-DOZAmyUN.js",
+      "_input-C2cOwRlO.js",
+      "_alert-dialog-GjgPTdIH.js",
+      "_AdminLayout-DWkFHAV2.js",
+      "_checkbox-c37R4Iq4.js",
+      "_card-B4yWOGSK.js",
+      "_label-1ktPDlyr.js",
+      "_table-CL4E51zA.js"
     ]
   },
   "resources/js/Pages/Settings.jsx": {
-    "file": "assets/Settings-B7NbjVoq.js",
+    "file": "assets/Settings-CHRDt4XA.js",
     "name": "Settings",
     "src": "resources/js/Pages/Settings.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AdminLayout-2JVQpu64.js"
+      "_AdminLayout-DWkFHAV2.js",
+      "_card-B4yWOGSK.js"
     ]
   },
   "resources/js/Pages/SubscriptionInvoices/Index.jsx": {
-    "file": "assets/Index-C60fXVIS.js",
+    "file": "assets/Index-C8bg9vH1.js",
     "name": "Index",
     "src": "resources/js/Pages/SubscriptionInvoices/Index.jsx",
     "isDynamicEntry": true,
     "imports": [
       "resources/js/app.jsx",
-      "_AdminLayout-2JVQpu64.js"
+      "_select-DOZAmyUN.js",
+      "_input-C2cOwRlO.js",
+      "_AdminLayout-DWkFHAV2.js",
+      "_card-B4yWOGSK.js",
+      "_search-cyr8bSEV.js",
+      "_table-CL4E51zA.js"
     ]
   },
   "resources/js/app.jsx": {
-    "file": "assets/app-B8EfPi1Z.js",
+    "file": "assets/app-B2fc8xNF.js",
     "name": "app",
     "src": "resources/js/app.jsx",
     "isEntry": true,
@@ -154,11 +286,18 @@
       "resources/js/Pages/SubscriptionInvoices/Index.jsx"
     ],
     "css": [
-      "assets/app-BFXlP5yR.css"
+      "assets/app-DCu63fxW.css"
+    ],
+    "assets": [
+      "assets/geist-cyrillic-ext-wght-normal-DjL33-gN.woff2",
+      "assets/geist-cyrillic-wght-normal-BEAKL7Jp.woff2",
+      "assets/geist-vietnamese-wght-normal-6IgcOCM7.woff2",
+      "assets/geist-latin-ext-wght-normal-DC-KSUi6.woff2",
+      "assets/geist-latin-wght-normal-BgDaEnEv.woff2"
     ]
   },
   "resources/js/echo.js": {
-    "file": "assets/echo-CJWGGfMV.js",
+    "file": "assets/echo-BglAhoZD.js",
     "name": "echo",
     "src": "resources/js/echo.js",
     "isDynamicEntry": true,

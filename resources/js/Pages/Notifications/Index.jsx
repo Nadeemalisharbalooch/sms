@@ -1,17 +1,24 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
+import { Bell, Check, Search } from 'lucide-react';
 import AdminLayout from '../../Layouts/AdminLayout';
 import { useRealtimeNotificationItems } from '../../hooks/useRealtimeNotifications';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 
 export default function NotificationsIndex({ user, notifications, filters }) {
     const [search, setSearch] = useState(filters.search || '');
-    const [status, setStatus] = useState(filters.status || '');
+    const [status, setStatus] = useState(filters.status || 'all');
     const liveItems = useRealtimeNotificationItems(user.id);
     const applyFilters = (event) => {
         event.preventDefault();
         router.get(
             route('notifications.index'),
-            { search: search || undefined, status: status || undefined },
+            { search: search || undefined, status: status === 'all' ? undefined : status },
             { preserveState: true, replace: true }
         );
     };
@@ -38,97 +45,105 @@ export default function NotificationsIndex({ user, notifications, filters }) {
     return (
         <AdminLayout user={user} title="Notifications" onLogout={() => router.post(route('logout.web'))}>
             <Head title="Notifications" />
-            <section className="overflow-hidden rounded-lg bg-white shadow-sm dark:bg-gray-800">
-                <div className="flex flex-col gap-4 border-b border-gray-200 px-6 py-4 dark:border-gray-700 md:flex-row md:items-center md:justify-between">
-                    <div>
-                        <h2 className="font-semibold text-gray-900 dark:text-white">Notification Tray</h2>
-                        <p className="mt-1 text-sm text-gray-500">
-                            {unreadCount > 0 ? `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}.` : 'You are all caught up.'}
-                        </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                        <form onSubmit={applyFilters} className="flex flex-wrap gap-2">
-                            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..." className="input !mt-0 w-48" />
-                            <select value={status} onChange={(e) => setStatus(e.target.value)} className="input !mt-0 w-36">
-                                <option value="">All</option>
-                                <option value="unread">Unread</option>
-                                <option value="read">Read</option>
-                            </select>
-                            <button type="submit" className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white dark:bg-indigo-600">Filter</button>
+            <Card size="sm" className="gap-0 py-0">
+                <CardHeader className="gap-2 border-b px-5 py-4">
+                    <CardTitle className="flex items-center gap-2">
+                        <Bell className="size-4.5 text-muted-foreground" />
+                        Notification Tray
+                    </CardTitle>
+                    <CardDescription>
+                        {unreadCount > 0 ? `${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}.` : 'You are all caught up.'}
+                    </CardDescription>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <form onSubmit={applyFilters} className="flex flex-wrap items-center gap-2">
+                            <div className="relative">
+                                <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                                <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..." className="w-52 pl-8" />
+                            </div>
+                            <Select value={status} onValueChange={setStatus}>
+                                <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All</SelectItem>
+                                    <SelectItem value="unread">Unread</SelectItem>
+                                    <SelectItem value="read">Read</SelectItem>
+                                </SelectContent>
+                            </Select>
+                            <Button type="submit">Filter</Button>
                         </form>
                         {unreadCount > 0 && (
-                            <button
-                                type="button"
-                                onClick={() => router.patch(route('notifications.read-all'))}
-                                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 dark:border-gray-600 dark:text-gray-200"
-                            >
-                                Mark all read
-                            </button>
+                            <>
+                                <Separator orientation="vertical" className="h-8" />
+                                <Button type="button" variant="outline" onClick={() => router.patch(route('notifications.read-all'))}>
+                                    <Check className="size-4" />
+                                    Mark all read
+                                </Button>
+                            </>
                         )}
                     </div>
-                </div>
+                </CardHeader>
 
                 {allItems.length ? (
-                    <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+                    <ul className="divide-y">
                         {allItems.map((notification) => {
                             const data = notification.data || {};
                             const unread = !notification.read_at;
                             return (
-                                <li key={notification.id} className="flex items-start gap-4 px-6 py-4">
-                                    <span className={`mt-2 h-2 w-2 shrink-0 rounded-full ${unread ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'}`} />
+                                <li key={notification.id} className={`flex items-start gap-4 px-5 py-4 transition-colors ${unread ? 'bg-primary/[0.03]' : ''}`}>
+                                    <span className={`mt-2 size-2 shrink-0 rounded-full ${unread ? 'bg-primary' : 'bg-muted-foreground/25'}`} />
                                     <div className="min-w-0 flex-1">
                                         <div className="flex flex-wrap items-center gap-2">
-                                            <p className="font-medium text-gray-900 dark:text-white">{data.title || 'Notification'}</p>
+                                            <p className={`text-sm ${unread ? 'font-semibold text-foreground' : 'font-medium text-foreground/80'}`}>{data.title || 'Notification'}</p>
                                             {(data.priority || data.category) && (
-                                                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs capitalize text-gray-500 dark:bg-gray-700 dark:text-gray-300">
+                                                <Badge variant="secondary" className="text-[0.65rem] capitalize">
                                                     {[data.priority, data.category].filter(Boolean).join(' · ')}
-                                                </span>
+                                                </Badge>
                                             )}
                                         </div>
-                                        <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{data.body || ''}</p>
-                                        <p className="mt-1 text-xs text-gray-400">
+                                        <p className="mt-1 text-sm text-muted-foreground">{data.body || ''}</p>
+                                        <p className="mt-1.5 text-xs text-muted-foreground/70">
                                             {new Date(notification.created_at).toLocaleString()}
                                         </p>
                                         {data.action_url && (
-                                            <a href={data.action_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm text-indigo-600">
+                                            <a href={data.action_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm font-medium text-primary underline-offset-4 hover:underline">
                                                 {data.action_text || 'Open'}
                                             </a>
                                         )}
                                     </div>
                                     {unread && (
-                                        <button
-                                            type="button"
-                                            onClick={() => router.patch(route('notifications.read', notification.id))}
-                                            className="shrink-0 text-sm text-indigo-600 hover:text-indigo-800"
-                                        >
+                                        <Button type="button" variant="outline" size="sm" onClick={() => router.patch(route('notifications.read', notification.id))} className="shrink-0">
                                             Mark read
-                                        </button>
+                                        </Button>
                                     )}
                                 </li>
                             );
                         })}
                     </ul>
                 ) : (
-                    <div className="px-6 py-12 text-center text-sm text-gray-500">No notifications found.</div>
+                    <div className="px-6 py-16 text-center">
+                        <p className="text-sm font-medium">No notifications found</p>
+                        <p className="mt-1 text-sm text-muted-foreground">Try adjusting your filters.</p>
+                    </div>
                 )}
 
                 {notifications.links.length > 3 && (
-                    <div className="flex flex-wrap gap-2 border-t border-gray-200 px-6 py-4 dark:border-gray-700">
+                    <CardContent className="flex flex-wrap gap-1.5 border-t px-5 py-4">
                         {notifications.links.map((link, index) =>
                             link.url ? (
                                 <Link
                                     key={index}
                                     href={link.url}
-                                    className={`rounded px-3 py-1 text-sm ${link.active ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200'}`}
+                                    className={index === 0 || index === notifications.links.length - 1
+                                        ? 'px-2 py-1 text-xs text-muted-foreground hover:text-foreground'
+                                        : `min-w-8 rounded-md border px-2.5 py-1 text-center text-xs font-medium ${link.active ? 'border-primary bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
                                     dangerouslySetInnerHTML={{ __html: link.label }}
                                 />
                             ) : (
-                                <span key={index} className="px-3 py-1 text-sm text-gray-400" dangerouslySetInnerHTML={{ __html: link.label }} />
+                                <span key={index} className="px-2 py-1 text-xs text-muted-foreground" dangerouslySetInnerHTML={{ __html: link.label }} />
                             )
                         )}
-                    </div>
+                    </CardContent>
                 )}
-            </section>
+            </Card>
         </AdminLayout>
     );
 }

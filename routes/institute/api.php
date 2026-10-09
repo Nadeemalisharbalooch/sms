@@ -258,7 +258,7 @@ Route::middleware(['auth:sanctum', 'active.institute.subscription'])->group(func
     // Step 1: Shifts & Time Slots Setup (Admin Period Duration + Standard Days & Friday Timings)
     Route::post('institutes/timetable/shifts', [TimetableController::class, 'setupShifts'])
         ->name('institutes.timetable.shifts.setup');
-    Route::post('institutes/timetable/setup-slots', [TimetableController::class, 'setupShifts'])
+    Route::post('institutes/timetable/setup-slots', [TimetableController::class, 'setupSlots'])
         ->name('institutes.timetable.slots.setup');
 
     // Step 2: Subject Weightage (Curriculum per Class/Grade)
