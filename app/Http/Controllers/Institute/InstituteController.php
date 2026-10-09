@@ -112,7 +112,7 @@ class InstituteController extends Controller
                     'is_active' => true,
                 ]);
 
-                foreach ($classData['sections'] as $sectionIndex => $sectionName) {
+                foreach ($classData['sections'] ?? [] as $sectionIndex => $sectionName) {
                     AcademicSection::create([
                         'class_id' => $academicClass->id,
                         'name' => $sectionName,

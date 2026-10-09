@@ -53,7 +53,9 @@ class StoreInstituteRequest extends FormRequest
 
             'email' => [
                 'nullable',
-                'email:rfc,dns',
+                // DNS validation rejects valid addresses when a domain has no
+                // mail records configured yet (for example, during setup).
+                'email:rfc',
                 'max:255',
                 'unique:institutes,email'
             ],
@@ -94,7 +96,7 @@ class StoreInstituteRequest extends FormRequest
             'academic_structure' => ['sometimes', 'array'],
             'academic_structure.*' => ['required', 'array'],
             'academic_structure.*.class_name' => ['required', 'string', 'max:100', 'distinct'],
-            'academic_structure.*.sections' => ['required', 'array'],
+            'academic_structure.*.sections' => ['sometimes', 'array'],
             'academic_structure.*.sections.*' => ['required', 'string', 'max:100', 'distinct'],
 
             'role_ids' => [
