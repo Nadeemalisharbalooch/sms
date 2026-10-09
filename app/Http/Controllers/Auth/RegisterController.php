@@ -32,7 +32,8 @@ class RegisterController extends Controller
             // Send OTP to user's email
             $this->otpService->sendOtp($user, 'email_verification');
 
-            $resource = new RegisterResource($user);
+            $token = $user->createToken($user->email)->plainTextToken;
+            $resource = new RegisterResource($user, $token);
 
             return ResponseService::success($resource, 'Registration successful. Please check your email for OTP verification.', 201);
         } catch (QueryException $e) {

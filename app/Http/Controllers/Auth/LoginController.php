@@ -20,12 +20,6 @@ class LoginController extends Controller
         }
         $user = Auth::user();
 
-        if ($user->email_verified_at === null) {
-            Auth::logout();
-
-            return ResponseService::error('Please verify your email address before logging in.', 403);
-        }
-
         if (! $user->is_active) {
             Auth::logout();
 
