@@ -25,7 +25,7 @@ use App\Http\Controllers\Institute\UserController;
 use Illuminate\Support\Facades\Route;
 
 $instituteResources = function () {
-    Route::middleware(['auth:sanctum', 'active.institute.subscription'])->group(function () {
+    Route::middleware(['auth:sanctum', 'email.verified', 'active.institute.subscription'])->group(function () {
 
         // Resources
 
@@ -66,7 +66,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
         ->name('institutes.notifications.destroy');
 });
 
-Route::middleware(['auth:sanctum', 'active.institute.subscription'])->group(function () {
+Route::middleware(['auth:sanctum', 'email.verified', 'active.institute.subscription'])->group(function () {
     Route::patch('institutes/academic-sessions/{academic_session}/activate', [AcademicSessionController::class, 'activate'])
         ->name('institutes.academic-sessions.activate');
 

@@ -28,6 +28,14 @@ class EnsureActiveInstituteSubscription
 
     public function handle(Request $request, Closure $next): Response
     {
+        // Keep this guard first even if middleware ordering changes on a route.
+        if ($request->user()?->email_verified_at === null) {
+            return ResponseService::error('Please verify your email address before continuing.', 403, null, [
+                'verified' => false,
+                'reason' => 'email_not_verified',
+            ]);
+        }
+
         if (in_array($request->route()?->getName(), self::EXEMPT_ROUTES, true)) {
             return $next($request);
         }

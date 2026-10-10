@@ -19,12 +19,8 @@ class VerifyOtpController extends Controller
     {
         $validated = $request->validated();
 
-        // Find user by email
-        $user = User::where('email', $validated['email'])->first();
-
-        if (! $user) {
-            return ResponseService::error('User not found.', 404);
-        }
+        /** @var User $user */
+        $user = $request->user();
 
         // Check if already verified
         if ($user->email_verified_at) {

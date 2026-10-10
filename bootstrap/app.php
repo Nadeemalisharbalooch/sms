@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureActiveInstituteSubscription;
+use App\Http\Middleware\EnsureEmailIsVerified;
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Auth\AuthenticationException;
@@ -20,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'active.institute.subscription' => EnsureActiveInstituteSubscription::class,
+            'email.verified' => EnsureEmailIsVerified::class,
             'admin' => EnsureUserIsAdmin::class,
         ]);
         $middleware->web(append: [
