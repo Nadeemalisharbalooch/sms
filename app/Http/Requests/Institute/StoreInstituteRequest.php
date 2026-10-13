@@ -4,6 +4,7 @@ namespace App\Http\Requests\Institute;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 
 class StoreInstituteRequest extends FormRequest
@@ -97,7 +98,7 @@ class StoreInstituteRequest extends FormRequest
             'academic_structure.*' => ['required', 'array'],
             'academic_structure.*.class_name' => ['required', 'string', 'max:100', 'distinct'],
             'academic_structure.*.sections' => ['sometimes', 'array'],
-            'academic_structure.*.sections.*' => ['required', 'string', 'max:100', 'distinct'],
+            'academic_structure.*.sections.*' => ['required', 'string', 'max:100'],
 
             'role_ids' => [
                 'sometimes',
@@ -114,6 +115,34 @@ class StoreInstituteRequest extends FormRequest
                 'exists:roles,id',
             ],
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            foreach ($this->input('academic_structure', []) as $classIndex => $classData) {
+                $seenSections = [];
+
+                foreach (($classData['sections'] ?? []) as $sectionIndex => $sectionName) {
+                    if (! is_string($sectionName)) {
+                        continue;
+                    }
+
+                    $normalizedName = mb_strtolower(trim($sectionName));
+
+                    if (isset($seenSections[$normalizedName])) {
+                        $validator->errors()->add(
+                            "academic_structure.{$classIndex}.sections.{$sectionIndex}",
+                            'Section names must be unique within the same class.'
+                        );
+
+                        continue;
+                    }
+
+                    $seenSections[$normalizedName] = true;
+                }
+            }
+        });
     }
 
      public function attributes(): array
