@@ -144,7 +144,7 @@ class InstituteController extends Controller
                 $role = Role::query()->create([
                     'institute_id' => $institute->id,
                     'name' => $roleName,
-                    'guard_name' => 'sanctum',
+                    'guard_name' => RolePermissionService::GUARD_NAME,
                 ]);
 
                 if ($roleName === 'Admin') {

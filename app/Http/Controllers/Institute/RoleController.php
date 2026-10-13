@@ -28,6 +28,7 @@ class RoleController extends Controller
 
         $roles = Role::query()
             ->where('institute_id', $instituteId)
+            ->where('guard_name', RolePermissionService::GUARD_NAME)
             ->with('permissions')
             ->orderBy('name')
             ->get();
@@ -58,8 +59,7 @@ public function store(StoreRoleRequest $request)
         return ResponseService::error('No active institute is associated with this user', 422);
     }
 
-    // Get guard_name from request or use default
-    $guardName = $validated['guard_name'] ?? 'sanctum';
+    $guardName = RolePermissionService::GUARD_NAME;
 
     // Create role with guard_name
     $role = Role::query()->create([
@@ -146,7 +146,7 @@ public function store(StoreRoleRequest $request)
 
         $validated = $request->validated();
 
-        $role->update(collect($validated)->only(['name', 'guard_name'])->all());
+        $role->update(collect($validated)->only(['name'])->all());
 
         if (strcasecmp($role->name, 'Admin') === 0) {
             RolePermissionService::syncAdminRole($role);
@@ -170,10 +170,9 @@ public function store(StoreRoleRequest $request)
                 ->values()
                 ->all();
 
-            // Use the permissions' own guard_name instead of relying on $role->guard_name,
-            // because $role->guard_name can be null/incorrect if frontend didn't send it.
             $permissionNames = \Spatie\Permission\Models\Permission::query()
                 ->whereIn('id', $permissionIds)
+                ->where('guard_name', RolePermissionService::GUARD_NAME)
                 ->pluck('name')
                 ->all();
 
@@ -223,7 +222,8 @@ public function store(StoreRoleRequest $request)
 
     private function belongsToActiveInstitute(Request $request, Role $role): bool
     {
-        return (int) $role->institute_id === $this->activeInstituteId($request);
+        return $role->guard_name === RolePermissionService::GUARD_NAME
+            && (int) $role->institute_id === $this->activeInstituteId($request);
     }
 
     private function isAdminRole(Role $role): bool

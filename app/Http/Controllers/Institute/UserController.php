@@ -471,6 +471,7 @@ class UserController extends Controller
     {
         return Role::query()
             ->where('institute_id', $instituteId)
+            ->where('guard_name', \App\Services\RolePermissionService::GUARD_NAME)
             ->whereIn('id', $roleIds)
             ->get();
     }

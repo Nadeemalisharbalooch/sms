@@ -7,26 +7,28 @@ use Spatie\Permission\Models\Role;
 
 class RolePermissionService
 {
-    /** Ensure configured permissions exist for a guard and return their names. */
-    public static function allNamesForGuard(string $guardName): array
+    public const GUARD_NAME = 'sanctum';
+
+    /** Ensure configured permissions exist for the application's roles guard. */
+    public static function allNamesForGuard(): array
     {
         foreach (config('app-permissions', []) as $module => $actions) {
             foreach ($actions as $action) {
                 Permission::firstOrCreate([
                     'name' => sprintf('%s.%s', $module, $action),
-                    'guard_name' => $guardName,
+                    'guard_name' => self::GUARD_NAME,
                 ]);
             }
         }
 
         return Permission::query()
-            ->where('guard_name', $guardName)
+            ->where('guard_name', self::GUARD_NAME)
             ->pluck('name')
             ->all();
     }
 
     public static function syncAdminRole(Role $role): void
     {
-        $role->syncPermissions(self::allNamesForGuard($role->guard_name));
+        $role->syncPermissions(self::allNamesForGuard());
     }
 }

@@ -31,12 +31,15 @@ class StoreRoleRequest extends FormRequest
                 'max:100',
                 Rule::unique('roles', 'name')
                     ->where('institute_id', $this->activeInstituteId())
-                    ->where('guard_name', $this->input('guard_name', 'sanctum')),
+                    ->where('guard_name', \App\Services\RolePermissionService::GUARD_NAME),
             ],
 
-             'guard_name' => ['nullable', 'in:web,sanctum'],
+            'guard_name' => ['nullable', 'in:sanctum'],
             'permissions' => 'nullable|array',
-            'permissions.*' => 'exists:permissions,id',
+            'permissions.*' => [
+                Rule::exists('permissions', 'id')
+                    ->where('guard_name', \App\Services\RolePermissionService::GUARD_NAME),
+            ],
         ];
     }
 

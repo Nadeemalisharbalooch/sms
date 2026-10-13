@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Institute;
 
 use App\Http\Controllers\Controller;
+use App\Services\RolePermissionService;
 use Illuminate\Http\Request;
 
 class PermissionController extends Controller
@@ -13,6 +14,7 @@ class PermissionController extends Controller
     public function index()
     {
         $permissions = \Spatie\Permission\Models\Permission::query()
+            ->where('guard_name', RolePermissionService::GUARD_NAME)
             ->orderBy('id')
             ->get();
 

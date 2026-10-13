@@ -51,13 +51,13 @@ class TeacherSeeder extends Seeder
             $roleCapital = Role::firstOrCreate([
                 'name' => 'Teacher',
                 'institute_id' => $institute->id,
-                'guard_name' => 'web',
+                'guard_name' => \App\Services\RolePermissionService::GUARD_NAME,
             ]);
 
             $roleLower = Role::firstOrCreate([
                 'name' => 'teacher',
                 'institute_id' => $institute->id,
-                'guard_name' => 'web',
+                'guard_name' => \App\Services\RolePermissionService::GUARD_NAME,
             ]);
 
             for ($i = 1; $i <= $count; $i++) {

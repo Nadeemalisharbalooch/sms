@@ -21,12 +21,10 @@ class AppPermissionsSeeder extends Seeder
                 // Convention: module.action (e.g. users.list)
                 $name = sprintf('%s.%s', $module, $action);
 
-                foreach (['web', 'sanctum'] as $guardName) {
-                    Permission::firstOrCreate([
-                        'name' => $name,
-                        'guard_name' => $guardName,
-                    ]);
-                }
+                Permission::firstOrCreate([
+                    'name' => $name,
+                    'guard_name' => RolePermissionService::GUARD_NAME,
+                ]);
             }
         }
 
@@ -35,27 +33,26 @@ class AppPermissionsSeeder extends Seeder
         foreach ($roles as $roleName) {
             Role::firstOrCreate([
                 'name' => $roleName,
-                'guard_name' => 'web',
+                'guard_name' => RolePermissionService::GUARD_NAME,
             ]);
         }
 
         // Assign all permissions to admin (optional but typical).
-        // IMPORTANT: syncPermissions expects the permission names that exist for the admin role's guard.
-        $adminRole = Role::where('name', 'admin')->where('guard_name', 'web')->first();
+        // syncPermissions expects names created for the role's guard.
+        $adminRole = Role::where('name', 'admin')->where('guard_name', RolePermissionService::GUARD_NAME)->first();
         if ($adminRole) {
             $permissionNames = Permission::query()
-                ->where('guard_name', 'web')
+                ->where('guard_name', RolePermissionService::GUARD_NAME)
                 ->pluck('name')
                 ->all();
 
             $adminRole->syncPermissions($permissionNames);
         }
 
-        // Institute roles use the sanctum guard. Keep every institute Admin
-        // role fully permissioned, including roles created before this seeder ran.
+        // Keep every institute Admin role fully permissioned, including roles created before this seeder ran.
         Role::query()
             ->where('name', 'Admin')
-            ->where('guard_name', 'sanctum')
+            ->where('guard_name', RolePermissionService::GUARD_NAME)
             ->get()
             ->each(fn (Role $role) => RolePermissionService::syncAdminRole($role));
     }
