@@ -89,6 +89,10 @@ Route::middleware(['auth:sanctum', 'email.verified', 'active.institute.subscript
 
     Route::apiResource('institutes/sections', AcademicSectionController::class)
         ->parameters(['sections' => 'academic_section']);
+    Route::get('institutes/sections/{academic_section}/subjects', [ClassSubjectController::class, 'sectionSubjects'])
+        ->name('institutes.sections.subjects.index');
+    Route::post('institutes/sections/{academic_section}/subjects', [ClassSubjectController::class, 'syncSectionSubjects'])
+        ->name('institutes.sections.subjects.sync');
 
     Route::get('institutes/teacher/attendance-tasks', [AttendanceController::class, 'tasks'])
         ->name('institutes.teacher.attendance-tasks');

@@ -7,6 +7,7 @@ use App\Http\Requests\Institute\SyncClassSubjectsRequest;
 use App\Http\Resources\Institute\AssignedSubjectResource;
 use App\Http\Resources\Institute\ClassSubjectResource;
 use App\Models\AcademicClass;
+use App\Models\AcademicSection;
 use App\Models\ClassSubject;
 use App\Models\InstituteUser;
 use App\Models\Subject;
@@ -16,6 +17,68 @@ use Illuminate\Http\Request;
 
 class ClassSubjectController extends Controller
 {
+    public function sectionSubjects(Request $request, string $academicSection)
+    {
+        $section = $this->activeSection($request, $academicSection);
+
+        if ($section === null) {
+            return ResponseService::notFound('Section not found');
+        }
+
+        $classSubjects = ClassSubject::query()
+            ->with('subject')
+            ->where('class_id', $section->class_id)
+            ->where('section_id', $section->id)
+            ->orderBy('id')
+            ->get();
+
+        return ResponseService::success(
+            ClassSubjectResource::collection($classSubjects),
+            'Section subjects retrieved successfully'
+        );
+    }
+
+    public function syncSectionSubjects(SyncClassSubjectsRequest $request, string $academicSection)
+    {
+        $instituteId = $this->activeInstituteId($request);
+
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $section = $this->activeSection($request, $academicSection);
+
+        if ($section === null) {
+            return ResponseService::notFound('Section not found');
+        }
+
+        $subjectIds = $request->validated('subject_ids');
+        $subjectsCount = Subject::query()
+            ->where('institute_id', $instituteId)
+            ->whereIn('id', $subjectIds)
+            ->count();
+
+        if ($subjectsCount !== count($subjectIds)) {
+            return ResponseService::error('Validation failed', 422, [
+                'subject_ids' => ['Every subject must belong to the active institute.'],
+            ]);
+        }
+
+        $this->syncForTarget($section->class_id, $section->id, $subjectIds);
+
+        $classSubjects = ClassSubject::query()
+            ->with('subject')
+            ->where('class_id', $section->class_id)
+            ->where('section_id', $section->id)
+            ->orderBy('id')
+            ->get();
+
+        return ResponseService::success(
+            ClassSubjectResource::collection($classSubjects),
+            'Subjects assigned to section successfully'
+        );
+    }
+
     public function assignedSubjects(Request $request)
     {
         $instituteId = $this->activeInstituteId($request);
@@ -300,6 +363,20 @@ class ClassSubjectController extends Controller
         return AcademicClass::query()
             ->whereKey($classId)
             ->where('institute_id', $instituteId)
+            ->first();
+    }
+
+    private function activeSection(Request $request, string $sectionId): ?AcademicSection
+    {
+        $instituteId = $this->activeInstituteId($request);
+
+        if ($instituteId === null) {
+            return null;
+        }
+
+        return AcademicSection::query()
+            ->whereKey($sectionId)
+            ->whereHas('academicClass', fn ($query) => $query->where('institute_id', $instituteId))
             ->first();
     }
 }
