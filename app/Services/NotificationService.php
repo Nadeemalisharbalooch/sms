@@ -28,7 +28,7 @@ class NotificationService
     {
         $owner = Institute::query()->find($instituteId)?->owner;
 
-        if ($owner?->email) {
+        if ($owner) {
             foreach (Arr::wrap($notification) as $item) {
                 NotificationFacade::send($owner, $item);
             }
@@ -43,7 +43,10 @@ class NotificationService
         $recipients = $users instanceof User ? [$users] : $users;
 
         foreach ($recipients as $user) {
-            if ($user instanceof User && $user->email) {
+            // Database notifications are addressed to the user record and do
+            // not depend on whether the user has an email address. Individual
+            // notification mail channels can still decide how to deliver mail.
+            if ($user instanceof User) {
                 foreach (Arr::wrap($notification) as $item) {
                     NotificationFacade::send($user, $item);
                 }
