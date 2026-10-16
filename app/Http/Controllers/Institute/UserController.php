@@ -189,7 +189,10 @@ class UserController extends Controller
 
         try {
             $user = \DB::transaction(function () use ($userData, $validated, $instituteId) {
+                // email_verified_at is intentionally not mass assignable on
+                // User, so set this trusted server-side value explicitly.
                 $user = User::create($userData);
+                $user->forceFill(['email_verified_at' => now()])->save();
 
                 InstituteUser::create([
                     'institute_id' => $instituteId,
