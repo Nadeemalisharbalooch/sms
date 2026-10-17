@@ -336,7 +336,6 @@ class InstituteController extends Controller
 
         return $data;
     }
-
     /**
      * Remove the specified resource from storage (owner only).
      */
@@ -361,7 +360,7 @@ class InstituteController extends Controller
             ->where('institute_id', $institute->id)
             ->exists();
     }
-
+    
     private function isInstituteOwner(Request $request, Institute $institute): bool
     {
         return InstituteUser::query()

@@ -80,7 +80,6 @@ Route::get('logos/{filename}', function (string $filename) {
     abort_if(str_contains($filename, '..'), 404);
     $path = 'logos/'.$filename;
     abort_unless(Storage::disk('public')->exists($path), 404);
-
     return Storage::disk('public')->response($path);
 })->where('filename', '[A-Za-z0-9_\-\.]+');
 

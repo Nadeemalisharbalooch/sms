@@ -33,6 +33,7 @@ class OtpMail extends Mailable implements ShouldQueue
         $subject = match ($this->type) {
             'email_verification' => 'Verify Your Email Address',
             'password_reset' => 'Reset Your Password',
+            'email_change' => 'Verify Your New Email Address',
             default => 'Your OTP Code',
         };
 
@@ -59,12 +60,14 @@ class OtpMail extends Mailable implements ShouldQueue
         $greeting = match ($this->type) {
             'email_verification' => 'Verify Your Email',
             'password_reset' => 'Reset Your Password',
+            'email_change' => 'Change Your Email Address',
             default => 'Your OTP Code',
         };
 
         $message = match ($this->type) {
             'email_verification' => 'Thank you for registering! Please use the following OTP to verify your email address:',
             'password_reset' => 'You have requested to reset your password. Please use the following OTP:',
+            'email_change' => 'Please use the following OTP to confirm your new email address:',
             default => 'Please use the following OTP:',
         };
 

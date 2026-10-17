@@ -9,6 +9,7 @@ use App\Http\Controllers\Institute\ClassSubjectController;
 use App\Http\Controllers\Institute\DashboardController;
 use App\Http\Controllers\Institute\FeeController;
 use App\Http\Controllers\Institute\FeeReportController;
+use App\Http\Controllers\Institute\EmailChangeController;
 use App\Http\Controllers\Institute\InstituteController;
 use App\Http\Controllers\Institute\NotificationController;
 use App\Http\Controllers\Institute\PermissionController;
@@ -31,6 +32,11 @@ $instituteResources = function () {
 
         Route::get('users/current', [UserController::class, 'showCurrent'])
             ->name('users.current.show');
+
+        Route::post('users/current/email/request-otp', [EmailChangeController::class, 'requestOtp'])
+            ->middleware('throttle:3,1')->name('users.current.email.request-otp');
+        Route::post('users/current/email/verify-otp', [EmailChangeController::class, 'verifyOtp'])
+            ->middleware('throttle:5,1')->name('users.current.email.verify-otp');
 
         Route::get('users/current/permissions', [UserController::class, 'currentPermissions'])
             ->name('users.current.permissions');

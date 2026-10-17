@@ -11,6 +11,7 @@ class EmailOtp extends Model
         'user_id',
         'otp',
         'type',
+        'destination_email',
         'is_used',
         'expires_at',
     ];

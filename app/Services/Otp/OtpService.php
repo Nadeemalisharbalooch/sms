@@ -62,10 +62,21 @@ class OtpService
         return true;
     }
 
+    /** Create an OTP for a pending email change and send it to the new address. */
+    public function sendEmailChangeOtp(User $user, string $email): bool
+    {
+        $emailOtp = $this->createOtp($user, 'email_change');
+        $emailOtp->update(['destination_email' => $email]);
+
+        Mail::to($email)->send(new OtpMail($user, $emailOtp->otp, 'email_change'));
+
+        return true;
+    }
+
     /**
      * Verify OTP for a user.
      */
-    public function verifyOtp(User $user, string $otp, string $type = 'email_verification'): bool
+    public function verifyOtp(User $user, string $otp, string $type = 'email_verification', ?string $destinationEmail = null): bool
     {
         $attemptsKey = $this->attemptsKey($user, $type);
         $attempts = (int) Cache::get($attemptsKey, 0);
@@ -74,12 +85,16 @@ class OtpService
             return false;
         }
 
-        $emailOtp = $user->emailOtps()
+        $emailOtpQuery = $user->emailOtps()
             ->where('type', $type)
             ->where('otp', $otp)
-            ->where('is_used', false)
-            ->latest()
-            ->first();
+            ->where('is_used', false);
+
+        if ($destinationEmail !== null) {
+            $emailOtpQuery->where('destination_email', $destinationEmail);
+        }
+
+        $emailOtp = $emailOtpQuery->latest()->first();
 
         if (! $emailOtp || ! $emailOtp->isValid()) {
             Cache::put($attemptsKey, $attempts + 1, self::ATTEMPT_WINDOW_SECONDS);
