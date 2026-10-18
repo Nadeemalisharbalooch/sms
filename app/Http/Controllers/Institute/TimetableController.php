@@ -470,6 +470,15 @@ class TimetableController extends Controller
             return $this->currentTeacherSchedule($request);
         }
 
+        if (isset($validated['session_id']) && ! AcademicSession::query()
+            ->whereKey($validated['session_id'])
+            ->where('institute_id', $institute->id)
+            ->exists()) {
+            return ResponseService::error('Validation failed', 422, [
+                'session_id' => ['The selected session does not belong to the active institute.'],
+            ]);
+        }
+
         $sessionId = $validated['session_id'] ?? $this->activeSessionId($institute->id);
 
         if ($sessionId === null) {

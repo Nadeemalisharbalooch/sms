@@ -16,7 +16,10 @@ class GetClassTimetableRequest extends FormRequest
         return [
             'class_id' => ['nullable', 'integer', 'exists:classes,id', 'required_with:section_id'],
             'section_id' => ['nullable', 'integer', 'exists:sections,id'],
-            'session_id' => ['nullable', 'integer', 'exists:academic_sessions,id'],
+            // The teacher timetable fallback always uses the active session.
+            // Leave institute/session ownership to the controller for the
+            // class-specific path instead of validating against all sessions.
+            'session_id' => ['nullable', 'integer'],
         ];
     }
 }
