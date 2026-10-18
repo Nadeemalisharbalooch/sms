@@ -22,6 +22,7 @@ use App\Http\Controllers\Institute\SubjectTeacherController;
 use App\Http\Controllers\Institute\SubscriptionController;
 use App\Http\Controllers\Institute\TeacherFeeStatusController;
 use App\Http\Controllers\Institute\TimetableController;
+use App\Http\Controllers\Institute\TeacherDashboardController;
 use App\Http\Controllers\Institute\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -40,6 +41,9 @@ $instituteResources = function () {
 
         Route::get('users/current/permissions', [UserController::class, 'currentPermissions'])
             ->name('users.current.permissions');
+
+        Route::get('users/teacher/dashboard-summary', [TeacherDashboardController::class, 'summary'])
+            ->name('users.teacher.dashboard-summary');
 
         Route::get('users/teachers', [UserController::class, 'teachers'])
             ->name('users.teachers');
