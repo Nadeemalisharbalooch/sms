@@ -43,6 +43,10 @@ $instituteResources = function () {
 
         Route::get('users/teachers', [UserController::class, 'teachers'])
             ->name('users.teachers');
+        Route::post('users/teachers', [UserController::class, 'storeTeacher'])
+            ->name('users.teachers.store');
+        Route::get('users/teachers/{teacherId}', [UserController::class, 'teacherView'])
+            ->whereNumber('teacherId')->name('users.teachers.show');
 
         Route::apiResource('roles', RoleController::class);
         Route::apiResource('users', UserController::class);

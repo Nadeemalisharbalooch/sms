@@ -8,6 +8,8 @@ use App\Http\Requests\Institute\UserStoreRequest;
 use App\Http\Requests\Institute\UserUpdateRequest;
 use App\Http\Resources\Institute\UserResource;
 use App\Models\InstituteUser;
+use App\Models\RoomTeacher;
+use App\Models\SubjectAllocation;
 use App\Models\User;
 use App\Services\NotificationService;
 use App\Services\ResponseService;
@@ -97,6 +99,63 @@ class UserController extends Controller
         ], 'Current user permissions retrieved successfully');
     }
 
+    /** Return the signed-in teacher and their room and subject assignments. */
+    public function teacherView(Request $request, int $teacherId)
+    {
+        $instituteId = $this->activeInstituteId($request);
+
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $teacher = User::query()
+            ->whereKey($teacherId)
+            ->where('is_admin', false)
+            ->whereHas('instituteUsers', fn ($query) => $query
+                ->where('institute_id', $instituteId)
+                ->where('is_active', true))
+            ->first();
+
+        if (! $teacher) {
+            return ResponseService::error('Teacher not found in the active institute', 404);
+        }
+
+        $hasTeacherRole = $teacher->roles()
+            ->where('roles.institute_id', $instituteId)
+            ->whereRaw('LOWER(roles.name) = ?', ['teacher'])
+            ->exists();
+
+        if (! $hasTeacherRole) {
+            return ResponseService::error('The selected user does not have the Teacher role', 404);
+        }
+
+        $roomAssignments = RoomTeacher::query()
+            ->with(['session', 'academicClass', 'section'])
+            ->where('teacher_user_id', $teacher->id)
+            ->whereHas('academicClass', fn ($query) => $query->where('institute_id', $instituteId))
+            ->latest()
+            ->get();
+
+        $subjectAssignments = SubjectAllocation::query()
+            ->with(['session', 'academicClass', 'section', 'subject'])
+            ->where('teacher_user_id', $teacher->id)
+            ->whereHas('academicClass', fn ($query) => $query->where('institute_id', $instituteId))
+            ->latest()
+            ->get();
+
+        $teacher->load(['roles' => fn ($query) => $query->where('roles.institute_id', $instituteId)]);
+
+        return ResponseService::success([
+            'teacher' => (new UserResource($teacher))->resolve(),
+            'assigned_class_rooms' => $roomAssignments->map(
+                fn ($assignment) => (new \App\Http\Resources\Institute\RoomTeacherResource($assignment))->resolve()
+            )->values(),
+            'assigned_subjects' => $subjectAssignments->map(
+                fn ($assignment) => (new \App\Http\Resources\Institute\SubjectAllocationResource($assignment))->resolve()
+            )->values(),
+        ], 'Teacher information and assignments retrieved successfully');
+    }
+
     /**
      * Display a listing of the resource.
      */
@@ -164,6 +223,63 @@ class UserController extends Controller
             $data,
             'Teachers retrieved successfully'
         );
+    }
+
+    /** Create a user and assign the active institute's Teacher role. */
+    public function storeTeacher(UserStoreRequest $request)
+    {
+        $instituteId = $this->activeInstituteId($request);
+
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        if (! $this->isInstituteAdminOrOwner($request, $instituteId)) {
+            return ResponseService::error('Only the institute owner or an Admin can manage users', 403);
+        }
+
+        $teacherRole = Role::query()
+            ->where('institute_id', $instituteId)
+            ->where('guard_name', \App\Services\RolePermissionService::GUARD_NAME)
+            ->whereRaw('LOWER(name) = ?', ['teacher'])
+            ->first();
+
+        if (! $teacherRole) {
+            return ResponseService::error('Teacher role is not configured for this institute', 422);
+        }
+
+        $validated = $request->validated();
+        $userData = $this->userData($validated);
+        $userData['is_accept_terms'] = true;
+        $userData['email_verified_at'] = now();
+        $userData['is_institute'] = true;
+
+        try {
+            $user = \DB::transaction(function () use ($userData, $teacherRole, $instituteId) {
+                $user = User::create($userData);
+                $user->forceFill(['email_verified_at' => now()])->save();
+
+                InstituteUser::create([
+                    'institute_id' => $instituteId,
+                    'user_id' => $user->id,
+                    'is_active' => true,
+                ]);
+
+                $user->syncRoles([$teacherRole]);
+
+                return $user;
+            });
+
+            NotificationService::staffCreated($user, $validated['password'], $instituteId);
+
+            return ResponseService::success(
+                new UserResource($user->load(['roles' => fn ($query) => $query->where('roles.institute_id', $instituteId)])),
+                'Teacher created successfully',
+                201
+            );
+        } catch (\Exception $e) {
+            return ResponseService::error('Failed to create teacher: '.$e->getMessage(), 422);
+        }
     }
 
     /**
