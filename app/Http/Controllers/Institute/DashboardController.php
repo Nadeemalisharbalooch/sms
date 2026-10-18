@@ -10,6 +10,8 @@ use App\Models\FeePayment;
 use App\Models\FeeVoucher;
 use App\Models\InstituteUser;
 use App\Models\Institute;
+use App\Models\RoomTeacher;
+use App\Models\SubjectAllocation;
 use App\Models\Student;
 use App\Models\TimetableEntry;
 use App\Services\ResponseService;
@@ -35,12 +37,22 @@ class DashboardController extends Controller
         }
 
         $teacherId = (int) $request->user()->id;
-        $classSections = TimetableEntry::query()
-            ->where('session_id', $sessionId)
-            ->where('teacher_user_id', $teacherId)
-            ->whereHas('academicClass', fn ($query) => $query->where('institute_id', $instituteId))
-            ->get(['class_id', 'section_id'])
-            ->unique(fn (TimetableEntry $entry) => $entry->class_id.':'.($entry->section_id ?? 'null'))
+        // Attendance tasks are assigned through room_teachers in class mode,
+        // and subject_allocations in subject mode. Use the same source as
+        // AttendanceController::tasks instead of timetable entries.
+        $institute = Institute::find($instituteId);
+        $attendanceTasks = $institute?->attendance_mode === 'class'
+            ? RoomTeacher::query()
+                ->where('session_id', $sessionId)
+                ->where('teacher_user_id', $teacherId)
+                ->get(['class_id', 'section_id'])
+            : SubjectAllocation::query()
+                ->where('session_id', $sessionId)
+                ->where('teacher_user_id', $teacherId)
+                ->get(['class_id', 'section_id', 'subject_id']);
+
+        $classSections = $attendanceTasks
+            ->unique(fn ($task) => $task->class_id.':'.($task->section_id ?? 'null'))
             ->values();
 
         $applyTeacherClassScope = function ($query) use ($classSections): void {
@@ -62,12 +74,16 @@ class DashboardController extends Controller
             ->distinct('student_id')
             ->count('student_id');
 
-        $institute = Institute::find($instituteId);
         $today = Carbon::today($institute?->timezone ?: config('app.timezone'));
         $todayAttendance = $classSections->isEmpty() ? 0 : Attendance::query()
             ->where('session_id', $sessionId)
             ->whereDate('date', $today->toDateString())
             ->where($applyTeacherClassScope)
+            ->when(
+                $institute?->attendance_mode === 'class',
+                fn ($query) => $query->whereNull('subject_id'),
+                fn ($query) => $query->whereIn('subject_id', $attendanceTasks->pluck('subject_id')->unique())
+            )
             ->count();
 
         $todayLectures = TimetableEntry::query()
