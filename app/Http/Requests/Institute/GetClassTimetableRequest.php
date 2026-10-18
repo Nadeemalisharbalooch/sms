@@ -14,7 +14,7 @@ class GetClassTimetableRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'class_id' => ['required', 'integer', 'exists:classes,id'],
+            'class_id' => ['nullable', 'integer', 'exists:classes,id', 'required_with:section_id'],
             'section_id' => ['nullable', 'integer', 'exists:sections,id'],
             'session_id' => ['nullable', 'integer', 'exists:academic_sessions,id'],
         ];

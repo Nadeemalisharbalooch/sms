@@ -146,6 +146,7 @@ class TimetableController extends Controller
         }
 
         $validated = $request->validated();
+
         $sessionId = $validated['session_id'] ?? $this->activeSessionId($institute->id);
 
         if ($sessionId === null) {
@@ -462,6 +463,13 @@ class TimetableController extends Controller
         }
 
         $validated = $request->validated();
+
+        // With no class or section filter, return the authenticated teacher's
+        // own timetable. Supplying class_id keeps the class grid behavior.
+        if (empty($validated['class_id'])) {
+            return $this->currentTeacherSchedule($request);
+        }
+
         $sessionId = $validated['session_id'] ?? $this->activeSessionId($institute->id);
 
         if ($sessionId === null) {
