@@ -22,7 +22,6 @@ use App\Http\Controllers\Institute\SubjectTeacherController;
 use App\Http\Controllers\Institute\SubscriptionController;
 use App\Http\Controllers\Institute\TeacherFeeStatusController;
 use App\Http\Controllers\Institute\TimetableController;
-use App\Http\Controllers\Institute\TeacherDashboardController;
 use App\Http\Controllers\Institute\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -42,7 +41,7 @@ $instituteResources = function () {
         Route::get('users/current/permissions', [UserController::class, 'currentPermissions'])
             ->name('users.current.permissions');
 
-        Route::get('users/teacher/dashboard-summary', [TeacherDashboardController::class, 'summary'])
+        Route::get('users/teacher/dashboard-summary', [DashboardController::class, 'teacherSummary'])
             ->name('users.teacher.dashboard-summary');
 
         Route::get('users/teachers', [UserController::class, 'teachers'])
@@ -325,7 +324,6 @@ Route::middleware(['auth:sanctum', 'email.verified', 'active.institute.subscript
     // Dashboard
     Route::get('institutes/dashboard/summary', [DashboardController::class, 'summary'])
         ->name('institutes.dashboard.summary');
-
     Route::get('institutes/current', [InstituteController::class, 'currentInstitute'])
         ->name('institutes.current');
 

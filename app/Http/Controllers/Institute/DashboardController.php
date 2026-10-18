@@ -9,6 +9,7 @@ use App\Models\Enrollment;
 use App\Models\FeePayment;
 use App\Models\FeeVoucher;
 use App\Models\InstituteUser;
+use App\Models\Institute;
 use App\Models\Student;
 use App\Models\TimetableEntry;
 use App\Services\ResponseService;
@@ -18,6 +19,75 @@ use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
+    public function teacherSummary(Request $request): JsonResponse
+    {
+        $instituteId = $this->activeInstituteId($request);
+
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $sessionId = $request->integer('session_id') ?: $this->activeSessionId($instituteId);
+        if ($sessionId === null) {
+            return ResponseService::error('Validation failed', 422, [
+                'session_id' => ['No active academic session exists for the active institute.'],
+            ]);
+        }
+
+        $teacherId = (int) $request->user()->id;
+        $classSections = TimetableEntry::query()
+            ->where('session_id', $sessionId)
+            ->where('teacher_user_id', $teacherId)
+            ->whereHas('academicClass', fn ($query) => $query->where('institute_id', $instituteId))
+            ->get(['class_id', 'section_id'])
+            ->unique(fn (TimetableEntry $entry) => $entry->class_id.':'.($entry->section_id ?? 'null'))
+            ->values();
+
+        $applyTeacherClassScope = function ($query) use ($classSections): void {
+            $query->where(function ($query) use ($classSections) {
+                foreach ($classSections as $classSection) {
+                    $query->orWhere(function ($query) use ($classSection) {
+                        $query->where('class_id', $classSection->class_id);
+                        if ($classSection->section_id !== null) {
+                            $query->where('section_id', $classSection->section_id);
+                        }
+                    });
+                }
+            });
+        };
+
+        $totalStudents = $classSections->isEmpty() ? 0 : Enrollment::query()
+            ->where('session_id', $sessionId)
+            ->where($applyTeacherClassScope)
+            ->distinct('student_id')
+            ->count('student_id');
+
+        $institute = Institute::find($instituteId);
+        $today = Carbon::today($institute?->timezone ?: config('app.timezone'));
+        $todayAttendance = $classSections->isEmpty() ? 0 : Attendance::query()
+            ->where('session_id', $sessionId)
+            ->whereDate('date', $today->toDateString())
+            ->where($applyTeacherClassScope)
+            ->count();
+
+        $todayLectures = TimetableEntry::query()
+            ->where('session_id', $sessionId)
+            ->where('teacher_user_id', $teacherId)
+            ->where('day_of_week', strtolower($today->englishDayOfWeek))
+            ->whereHas('academicClass', fn ($query) => $query->where('institute_id', $instituteId))
+            ->count();
+
+        return ResponseService::success([
+            'teacher_id' => $teacherId,
+            'session_id' => (int) $sessionId,
+            'date' => $today->toDateString(),
+            'total_classes' => $classSections->pluck('class_id')->unique()->count(),
+            'total_students' => $totalStudents,
+            'today_attendance' => $todayAttendance,
+            'today_lectures' => $todayLectures,
+        ], 'Teacher dashboard summary retrieved successfully');
+    }
+
     public function summary(Request $request): JsonResponse
     {
         $instituteId = $this->activeInstituteId($request);
