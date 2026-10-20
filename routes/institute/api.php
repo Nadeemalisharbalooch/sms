@@ -619,8 +619,14 @@ Route::middleware(['auth:sanctum', 'email.verified', 'active.institute.subscript
     Route::apiResource('institutes', InstituteController::class)
         ->only(['index', 'show'])->middleware('permission:institute.view');
 
+    // Creating the first institute must work before the user has an active
+    // institute membership (the store action creates that membership). The
+    // route remains behind auth and email verification from the parent group.
+    Route::apiResource('institutes', InstituteController::class)
+        ->only(['store']);
+
     Route::middleware('permission:institute.update')->group(function () {
         Route::apiResource('institutes', InstituteController::class)
-            ->only(['store', 'update', 'destroy']);
+            ->only(['update', 'destroy']);
     });
 });
