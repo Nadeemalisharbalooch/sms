@@ -4,6 +4,7 @@ return [
     // 1. User & Role Management
     'users' => ['view', 'create', 'update', 'delete'],
     'roles' => ['view', 'create', 'update', 'delete'],
+    'permissions' => ['view', 'create', 'update', 'delete'],
 
     // 2. Core Institute Configuration
     'institute' => ['view', 'update'],

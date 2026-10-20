@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureActiveInstituteSubscription;
+use App\Http\Middleware\EnsureHasPermission;
 use App\Http\Middleware\EnsureEmailIsVerified;
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\HandleInertiaRequests;
@@ -23,6 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'active.institute.subscription' => EnsureActiveInstituteSubscription::class,
             'email.verified' => EnsureEmailIsVerified::class,
             'admin' => EnsureUserIsAdmin::class,
+            'permission' => EnsureHasPermission::class,
         ]);
         $middleware->web(append: [
             HandleInertiaRequests::class,
