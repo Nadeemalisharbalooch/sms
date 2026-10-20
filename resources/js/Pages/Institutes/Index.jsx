@@ -1,5 +1,5 @@
 import { Head, router, useForm } from '@inertiajs/react';
-import { useState } from 'react';import { Building2, Camera, Pencil, Plus, Trash2, Users } from 'lucide-react';
+import { useState } from 'react';import { Building2, Camera, Eye, Pencil, Plus, Power, Trash2, Users } from 'lucide-react';
 import AdminLayout from '../../Layouts/AdminLayout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -86,6 +86,10 @@ export default function InstitutesIndex({ user, institutes, plans }) {
         router.delete(route('institute.destroy', institute.public_id));
     }
 
+    function toggleActive(institute) {
+        router.patch(route('institute.toggle-active', institute.public_id));
+    }
+
     return (
         <AdminLayout user={user} title="Institutes" onLogout={() => router.post(route('logout.web'))}>
             <Head title="Institutes" />
@@ -141,6 +145,19 @@ export default function InstitutesIndex({ user, institutes, plans }) {
                                         </TableCell>
                                         <TableCell className="px-4 py-4 text-right">
                                             <div className="flex justify-end gap-1">
+                                                <Button type="button" variant="ghost" size="icon-sm" title="View details" onClick={() => router.visit(route('institute.show', institute.public_id))}>
+                                                    <Eye className="size-3.5" />
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    variant="ghost"
+                                                    size="icon-sm"
+                                                    title={institute.is_active ? 'Deactivate' : 'Activate'}
+                                                    className={institute.is_active ? 'text-amber-600 hover:text-amber-700 dark:text-amber-400' : 'text-emerald-600 hover:text-emerald-700 dark:text-emerald-400'}
+                                                    onClick={() => toggleActive(institute)}
+                                                >
+                                                    <Power className="size-3.5" />
+                                                </Button>
                                                 <Button type="button" variant="ghost" size="icon-sm" title="Edit" onClick={() => startEdit(institute)}>
                                                     <Pencil className="size-3.5" />
                                                 </Button>

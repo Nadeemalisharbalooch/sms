@@ -34,6 +34,11 @@ Route::middleware(['auth', 'admin'])->group(function () {
     Route::patch('notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
     Route::patch('notifications/read-all', [NotificationController::class, 'markAllRead'])->name('notifications.read-all');
 
+    Route::get('institute/{institute}', [SuperAdminInstituteController::class, 'show'])
+        ->name('institute.show');
+    Route::patch('institute/{institute}/toggle-active', [SuperAdminInstituteController::class, 'toggleActive'])
+        ->name('institute.toggle-active');
+
     Route::resource('institute', SuperAdminInstituteController::class)
         ->only(['index', 'store', 'update', 'destroy']);
     Route::resource('plans', PlanController::class)

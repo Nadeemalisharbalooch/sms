@@ -35,9 +35,41 @@ class SuperAdminInstituteController extends Controller
             'institutes' => Institute::query()
                 ->with(['owner:users.id,users.name,users.email,users.phone', 'subscription.plan', 'subscription.invoice'])
                 ->latest()
-                ->get(['id', 'public_id', 'name', 'email', 'phone', 'address', 'logo', 'favicon', 'attendance_mode', 'is_active']),
+                ->get(),
             'plans' => Plan::query()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'price', 'billing_interval', 'trial_days']),
         ]);
+    }
+
+    public function show(Request $request, Institute $institute): Response
+    {
+        $institute->load([
+            'owner:users.id,users.name,users.email,users.phone',
+            'subscription.plan',
+            'subscription.invoice',
+        ]);
+
+        return Inertia::render('Institutes/Show', [
+            'user' => [
+                'id' => $request->user()->id,
+                'name' => $request->user()->name,
+                'email' => $request->user()->email,
+            ],
+            'institute' => array_merge($institute->toArray(), [
+                'stats' => $this->usageStats($institute),
+            ]),
+        ]);
+    }
+
+    public function toggleActive(Institute $institute): RedirectResponse
+    {
+        $institute->update(['is_active' => ! $institute->is_active]);
+
+        return back()->with(
+            'success',
+            $institute->is_active
+                ? "{$institute->name} activated successfully."
+                : "{$institute->name} deactivated successfully."
+        );
     }
 
     public function store(Request $request): RedirectResponse
@@ -214,6 +246,23 @@ class SuperAdminInstituteController extends Controller
         );
 
         return back()->with('success', 'Payment rejected and the institute has been asked to re-upload the receipt.');
+    }
+
+    private function usageStats(Institute $institute): array
+    {
+        return [
+            'students' => Student::query()->where('institute_id', $institute->id)->count(),
+            'teachers' => User::query()
+                ->whereHas('roles', fn ($query) => $query
+                    ->where('roles.institute_id', $institute->id)
+                    ->where('roles.name', 'Teacher'))
+                ->count(),
+            'users' => InstituteUser::query()
+                ->where('institute_id', $institute->id)
+                ->where('is_active', true)
+                ->count(),
+            'classes' => AcademicClass::query()->where('institute_id', $institute->id)->count(),
+        ];
     }
 
     private function validated(Request $request): array
