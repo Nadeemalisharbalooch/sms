@@ -33,7 +33,7 @@ class EnsureHasPermission
         if ($user === null) {
             return ResponseService::error('Unauthenticated.', 401);
         }
-
+        
         // Global Super Admins bypass module permissions entirely.
         if ($user->is_admin) {
             return $next($request);

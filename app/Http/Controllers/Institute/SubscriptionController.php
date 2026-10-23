@@ -64,6 +64,25 @@ class SubscriptionController extends Controller
             return ResponseService::error('No active institute is associated with this user', 422);
         }
 
+        $institute = Institute::query()
+            ->whereKey($instituteId)
+            ->first(['id', 'public_id', 'name', 'short_name', 'email', 'phone', 'logo']);
+        $institutePayload = $institute ? [
+            'id' => $institute->id,
+            'public_id' => $institute->public_id,
+            'name' => $institute->name,
+            'short_name' => $institute->short_name,
+            'email' => $institute->email,
+            'phone' => $institute->phone,
+            'logo' => $institute->logo_url,
+        ] : null;
+        $userPayload = [
+            'id' => $request->user()->id,
+            'name' => $request->user()->name,
+            'email' => $request->user()->email,
+            'phone' => $request->user()->phone,
+        ];
+
         $subscription = InstituteSubscription::query()
             ->with('plan')
             ->where('institute_id', $instituteId)
@@ -72,6 +91,8 @@ class SubscriptionController extends Controller
 
         if (! $subscription) {
             return ResponseService::success([
+                'institute' => $institutePayload,
+                'user' => $userPayload,
                 'subscription' => null,
                 'can_access' => false,
                 'is_expired' => false,
@@ -93,6 +114,8 @@ class SubscriptionController extends Controller
         $canAccess = ! $subscription->blocked && in_array($status, ['trialing', 'active'], true) && ! $isExpired;
 
         return ResponseService::success([
+            'institute' => $institutePayload,
+            'user' => $userPayload,
             'subscription' => [
                 'id' => $subscription->id,
                 'institute_id' => $subscription->institute_id,
