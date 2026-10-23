@@ -34,6 +34,7 @@ class OtpMail extends Mailable implements ShouldQueue
             'email_verification' => 'Verify Your Email Address',
             'password_reset' => 'Reset Your Password',
             'email_change' => 'Verify Your New Email Address',
+            'admin_login' => 'Your Admin Sign-In Verification Code',
             default => 'Your OTP Code',
         };
 
@@ -61,6 +62,7 @@ class OtpMail extends Mailable implements ShouldQueue
             'email_verification' => 'Verify Your Email',
             'password_reset' => 'Reset Your Password',
             'email_change' => 'Change Your Email Address',
+            'admin_login' => 'Admin Sign-In Verification',
             default => 'Your OTP Code',
         };
 
@@ -68,6 +70,7 @@ class OtpMail extends Mailable implements ShouldQueue
             'email_verification' => 'Thank you for registering! Please use the following OTP to verify your email address:',
             'password_reset' => 'You have requested to reset your password. Please use the following OTP:',
             'email_change' => 'Please use the following OTP to confirm your new email address:',
+            'admin_login' => 'Use the following one-time code to complete your admin sign-in. It expires in 10 minutes:',
             default => 'Please use the following OTP:',
         };
 

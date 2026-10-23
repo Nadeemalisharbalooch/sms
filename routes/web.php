@@ -13,20 +13,28 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 
 Route::get('/', function () {
-    return redirect()->route('login.page');
+    abort(404);
 });
 
-// Auth Routes (Inertia)
-Route::get('login', [LoginController::class, 'show'])->name('login.page');
-Route::post('login', [LoginController::class, 'store'])->name('login.store');
-Route::post('logout', [LogoutController::class, 'store'])->name('logout.web');
+Route::prefix('operations-center-6975')->group(function () {
+    // Admin authentication routes share the private admin URL prefix but must
+    // remain available before the user has authenticated.
+    Route::get('login', [LoginController::class, 'show'])->name('login.page');
+    Route::post('login', [LoginController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
+    Route::post('login/verify-2fa', [LoginController::class, 'verifyTwoFactor'])
+        ->middleware('throttle:5,1')->name('login.verify-2fa');
+    Route::post('login/resend-2fa', [LoginController::class, 'resendTwoFactor'])
+        ->middleware('throttle:3,1')->name('login.resend-2fa');
+    Route::post('logout', [LogoutController::class, 'store'])->name('logout.web');
 
-// Super Admin area (Inertia). Every route below requires an authenticated
-// global admin (users.is_admin = true); regular institute users are blocked.
-Route::middleware(['auth', 'admin'])->group(function () {
+    // Super Admin area (Inertia). Every route below requires an authenticated
+    // global admin (users.is_admin = true); regular institute users are blocked.
+    Route::middleware(['auth', 'admin'])->group(function () {
     // Dashboard (Inertia)
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('settings', [SettingsController::class, 'index'])->name('settings');
+    Route::patch('settings/two-factor', [SettingsController::class, 'updateTwoFactor'])
+        ->name('settings.two-factor.update');
 
     // Super Admin notification tray
     Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
@@ -50,6 +58,7 @@ Route::middleware(['auth', 'admin'])->group(function () {
         ->name('subscription-invoices.verify');
     Route::post('subscription-invoices/{invoice}/reject', [SuperAdminInstituteController::class, 'reject'])
         ->name('subscription-invoices.reject');
+    });
 });
 
 // Fallback for "public/storage/..." URLs. When the web server's document

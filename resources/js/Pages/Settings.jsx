@@ -1,8 +1,9 @@
 import { Head, router } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
-import { Check, Monitor, Moon, Sun } from 'lucide-react';
+import { Check, Monitor, Moon, ShieldCheck, Sun } from 'lucide-react';
 import AdminLayout from '../Layouts/AdminLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
 
 const options = [
     { value: 'light', title: 'Light', description: 'Use the light appearance.', icon: Sun },
@@ -15,8 +16,9 @@ function applyTheme(theme) {
     document.documentElement.classList.toggle('dark', theme === 'dark' || (theme === 'system' && prefersDark));
 }
 
-export default function Settings({ user }) {
+export default function Settings({ user, adminTwoFactorEnabled = false }) {
     const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'system');
+    const [twoFactorEnabled, setTwoFactorEnabled] = useState(adminTwoFactorEnabled);
 
     useEffect(() => {
         applyTheme(theme);
@@ -33,6 +35,29 @@ export default function Settings({ user }) {
         <AdminLayout user={user} title="System Settings" onLogout={() => router.post(route('logout.web'))}>
             <Head title="System Settings" />
             <div className="max-w-2xl">
+                <Card size="sm" className="mb-5">
+                    <CardHeader className="px-5">
+                        <CardTitle className="flex items-center gap-2"><ShieldCheck className="size-5 text-primary" /> Admin two-factor authentication</CardTitle>
+                        <CardDescription>Require an emailed verification code after an admin enters their password.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex items-center justify-between gap-4 px-5">
+                        <div>
+                            <p className="text-sm font-medium">{twoFactorEnabled ? 'Enabled for admin sign-ins' : 'Disabled'}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">This only changes the web admin login. Institute and API sign-ins are unaffected.</p>
+                        </div>
+                        <Switch
+                            checked={twoFactorEnabled}
+                            aria-label="Enable admin two-factor authentication"
+                            onCheckedChange={(enabled) => {
+                                setTwoFactorEnabled(enabled);
+                                router.patch(route('settings.two-factor.update'), { enabled }, {
+                                    preserveScroll: true,
+                                    onError: () => setTwoFactorEnabled(!enabled),
+                                });
+                            }}
+                        />
+                    </CardContent>
+                </Card>
                 <Card size="sm">
                     <CardHeader className="px-5">
                         <CardTitle>Appearance</CardTitle>
