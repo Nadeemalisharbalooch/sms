@@ -68,7 +68,7 @@ class PartnerController extends Controller
                 'company_name' => $data['company_name'], 'phone' => $data['phone'],
                 'website_url' => $data['website_url'] ?? null, 'promotion_methods' => $data['promotion_methods'],
                 'tax_id_or_cnic' => $data['tax_id_or_cnic'], 'referral_code' => $code,
-                'status' => 'active', 'commission_rate' => 20, 'terms_agreed_at' => now(),
+                'status' => 'inactive', 'commission_rate' => 20, 'terms_agreed_at' => now(),
             ]);
         });
 
