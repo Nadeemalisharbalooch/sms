@@ -23,7 +23,8 @@ return new class extends Migration {
             $table->string('status', 20)->default('active')->index();
             $table->decimal('commission_rate', 5, 2)->default(20);
             $table->string('payout_method', 30)->nullable();
-            $table->json('payout_details')->nullable();
+            // Laravel's encrypted:array cast stores an encrypted string, not JSON.
+            $table->text('payout_details')->nullable();
             $table->timestamp('terms_agreed_at');
             $table->timestamps();
         });
