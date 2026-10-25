@@ -78,6 +78,47 @@ class PartnerController extends Controller
         ]], 201);
     }
 
+    public function updateSetup(Request $request)
+    {
+        $profile = $request->user()->partnerProfile;
+        abort_unless($profile, 404, 'Partner profile not found.');
+
+        $data = $request->validate([
+            'company_name' => ['sometimes', 'required', 'string', 'max:255'],
+            'phone' => ['sometimes', 'required', 'string', 'max:30'],
+            'website_url' => ['sometimes', 'nullable', 'url', 'max:255'],
+            'promotion_methods' => ['sometimes', 'required', 'array', 'min:1'],
+            'promotion_methods.*' => ['string', 'max:50'],
+            'tax_id_or_cnic' => ['sometimes', 'required', 'string', 'max:50'],
+        ]);
+
+        DB::transaction(function () use ($request, $profile, $data) {
+            $profile->update($data);
+            if (array_key_exists('phone', $data)) {
+                $request->user()->update(['phone' => $data['phone']]);
+            }
+        });
+
+        $profile->refresh();
+
+        return response()->json(['status' => 'success', 'message' => 'Partner profile updated successfully.', 'data' => [
+            'user' => $request->user()->only(['id', 'name', 'email', 'is_institute', 'is_partner']),
+            'partner_profile' => [
+                'id' => $profile->id,
+                'company_name' => $profile->company_name,
+                'phone' => $profile->phone,
+                'website_url' => $profile->website_url,
+                'promotion_methods' => $profile->promotion_methods,
+                'tax_id_or_cnic' => $profile->tax_id_or_cnic,
+                'referral_code' => $profile->referral_code,
+                'referral_link' => url('/ref/'.$profile->referral_code),
+                'status' => $profile->status,
+                'commission_rate' => (float) $profile->commission_rate,
+                'terms_agreed_at' => $profile->terms_agreed_at,
+            ],
+        ]]);
+    }
+
     public function track(Request $request)
     {
         $data = $request->validate(['ref_code' => ['required', 'string', 'max:32']]);
@@ -135,7 +176,16 @@ class PartnerController extends Controller
             });
             return response()->json(['status' => 'success', 'message' => 'Withdrawal request submitted for Admin approval.', 'data' => $withdrawal], 201);
         }
-        return response()->json(['status' => 'success', 'data' => $profile->withdrawals()->latest()->paginate(15)]);
+        $withdrawals = $profile->withdrawals()->latest()->paginate(15);
+
+        return response()->json(['status' => 'success', 'data' => [
+            'withdrawals' => $withdrawals->items(),
+            'pagination' => [
+                'current_page' => $withdrawals->currentPage(),
+                'total_pages' => $withdrawals->lastPage(),
+                'total_records' => $withdrawals->total(),
+            ],
+        ]]);
     }
 
     public function referrals(Request $request)

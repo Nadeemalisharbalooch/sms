@@ -15,7 +15,10 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     Route::get('/user/is-institute', function (Request $request) {
-        return response()->json((bool) $request->user()->is_institute);
+        return response()->json([
+            'is_institute' => (bool) $request->user()->is_institute,
+            'is_partner' => (bool) $request->user()->is_partner,
+        ]);
     });
 
     // Route for the current user to update their own information
