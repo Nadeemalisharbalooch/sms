@@ -29,3 +29,4 @@ Broadcast::routes(['middleware' => ['auth:sanctum']]);
 
 require __DIR__ . '/auth.php';
 require __DIR__ . '/institute/api.php';
+require __DIR__ . '/partner/api.php';

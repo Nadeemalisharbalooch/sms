@@ -92,6 +92,17 @@ class InstituteController extends Controller
 
             $data = $this->handleFileUploads($data);
 
+            $referralCode = $request->cookie('partner_ref');
+            if ($referralCode) {
+                $partner = \App\Models\PartnerProfile::query()
+                    ->where('referral_code', $referralCode)
+                    ->where('status', 'active')
+                    ->first();
+                if ($partner && $partner->user_id !== $user->id) {
+                    $data['referral_id'] = $partner->referral_code;
+                }
+            }
+
             $institute = Institute::create($data);
 
             AcademicSession::create([

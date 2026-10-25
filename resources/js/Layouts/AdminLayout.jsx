@@ -1,6 +1,6 @@
 import { Link, usePage } from '@inertiajs/react';
 import { useState } from 'react';
-import { Check, Database, LogOut, Bell, Building2, CreditCard, LayoutDashboard, Package, Settings, X, Wifi, Loader2 } from 'lucide-react';
+import { Check, Database, LogOut, Bell, Building2, CreditCard, LayoutDashboard, Package, Settings, X, Wifi, Loader2, Handshake } from 'lucide-react';
 import useRealtimeNotifications from '../hooks/useRealtimeNotifications';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +12,7 @@ const navigation = [
     { label: 'All Institutes', route: 'institute.index', icon: Building2 },
     { label: 'Plans & Packages', route: 'plans.index', icon: Package },
     { label: 'Subscription Invoices', route: 'subscription-invoices.index', icon: CreditCard },
+    { label: 'Partners', route: 'partners.admin.index', icon: Handshake },
     { label: 'Notifications', route: 'notifications.index', icon: Bell },
     { label: 'System Settings', route: 'settings', icon: Settings },
 ];

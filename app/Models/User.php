@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['name', 'email', 'password','is_institute','is_active','is_admin','address','phone'])]
+#[Fillable(['name', 'email', 'password','is_institute','is_partner','is_active','is_admin','address','phone'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -67,6 +67,11 @@ class User extends Authenticatable
     public function latestOtp(): HasOne
     {
         return $this->hasOne(EmailOtp::class)->latestOfMany();
+    }
+
+    public function partnerProfile(): HasOne
+    {
+        return $this->hasOne(PartnerProfile::class);
     }
 
     // If you want to restrict to certain role types/guards later, you can customize here.

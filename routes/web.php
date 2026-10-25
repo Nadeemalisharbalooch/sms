@@ -12,6 +12,8 @@ use App\Http\Controllers\Web\SuperAdminInstituteController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 
+require __DIR__.'/partner/web.php';
+
 Route::get('/', function () {
     abort(404);
 });

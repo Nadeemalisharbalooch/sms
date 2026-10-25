@@ -179,6 +179,8 @@ class SuperAdminInstituteController extends Controller
                 'verified_by_user_id' => $request->user()->id,
             ]);
 
+            \App\Services\PartnerCommissionService::recordForPaidInvoice($invoice->fresh('institute'));
+
             $subscription = InstituteSubscription::query()
                 ->where('institute_id', $invoice->institute_id)
                 ->latest()
