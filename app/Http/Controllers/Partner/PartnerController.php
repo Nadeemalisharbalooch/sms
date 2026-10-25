@@ -21,6 +21,29 @@ class PartnerController extends Controller
         return $profile;
     }
 
+    public function setupStatus(Request $request)
+    {
+        $user = $request->user();
+        $profile = $user->partnerProfile;
+
+        return response()->json(['status' => 'success', 'data' => [
+            'user' => $user->only(['id', 'name', 'email', 'is_institute', 'is_partner']),
+            'partner_profile' => $profile ? [
+                'id' => $profile->id,
+                'company_name' => $profile->company_name,
+                'phone' => $profile->phone,
+                'website_url' => $profile->website_url,
+                'promotion_methods' => $profile->promotion_methods,
+                'tax_id_or_cnic' => $profile->tax_id_or_cnic,
+                'referral_code' => $profile->referral_code,
+                'referral_link' => url('/ref/'.$profile->referral_code),
+                'status' => $profile->status,
+                'commission_rate' => (float) $profile->commission_rate,
+                'terms_agreed_at' => $profile->terms_agreed_at,
+            ] : null,
+        ]]);
+    }
+
     public function setup(Request $request)
     {
         $data = $request->validate([

@@ -9,6 +9,7 @@ Route::prefix('partners')->group(function () {
     Route::get('track', [PartnerController::class, 'track'])->middleware('throttle:60,1')->name('partners.track');
 
     Route::middleware('auth:sanctum')->group(function () {
+        Route::get('setup', [PartnerController::class, 'setupStatus'])->name('partners.setup.status');
         Route::post('setup', [PartnerController::class, 'setup'])->name('partners.setup');
         Route::get('dashboard', [PartnerController::class, 'dashboard'])->name('partners.dashboard');
         Route::put('payout-settings', [PartnerController::class, 'payoutSettings'])->name('partners.payout-settings');
