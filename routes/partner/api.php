@@ -17,7 +17,6 @@ Route::prefix('partners')->group(function () {
         Route::get('referrals', [PartnerController::class, 'referrals'])->name('partners.referrals');
     });
 });
-
 Route::prefix('v1/admin/partners')->middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::get('/', [AdminPartnerController::class, 'index'])->name('api.admin.partners.index');
     Route::patch('{partner}', [AdminPartnerController::class, 'update'])->whereNumber('partner')->name('api.admin.partners.update');
