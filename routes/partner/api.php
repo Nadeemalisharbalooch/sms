@@ -13,6 +13,7 @@ Route::prefix('partners')->group(function () {
         Route::post('setup', [PartnerController::class, 'setup'])->name('partners.setup');
         Route::put('setup', [PartnerController::class, 'updateSetup'])->name('partners.setup.update');
         Route::get('dashboard', [PartnerController::class, 'dashboard'])->name('partners.dashboard');
+        Route::get('payout-settings', [PartnerController::class, 'payoutSettings'])->name('partners.payout-settings.show');
         Route::put('payout-settings', [PartnerController::class, 'payoutSettings'])->name('partners.payout-settings');
         Route::get('withdrawals', [PartnerController::class, 'withdrawals'])->name('partners.withdrawals.index');
         Route::post('withdrawals', [PartnerController::class, 'withdrawals'])->name('partners.withdrawals.store');

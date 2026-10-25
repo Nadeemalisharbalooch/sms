@@ -155,6 +155,14 @@ class PartnerController extends Controller
     public function payoutSettings(Request $request)
     {
         $profile = $this->profile($request);
+        if ($request->isMethod('get')) {
+            return response()->json(['status' => 'success', 'data' => [
+                'has_payout_details' => (bool) $profile->payout_method && (bool) $profile->payout_details,
+                'payout_method' => $profile->payout_method,
+                'payout_details' => $profile->payout_details,
+            ]]);
+        }
+
         $data = $request->validate(['payout_method' => ['required', 'in:bank_transfer'], 'payout_details' => ['required', 'array'], 'payout_details.bank_name' => ['required', 'string', 'max:100'], 'payout_details.account_title' => ['required', 'string', 'max:150'], 'payout_details.iban_or_account' => ['required', 'string', 'max:60']]);
         $profile->update($data);
         return response()->json(['status' => 'success', 'message' => 'Payout settings updated successfully.']);
