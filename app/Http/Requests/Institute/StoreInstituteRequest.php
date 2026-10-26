@@ -47,6 +47,7 @@ class StoreInstituteRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'short_name' => ['nullable', 'string', 'max:50'],
             'referral_id' => ['nullable', 'string', 'max:100'],
+            'ref_code' => ['nullable', 'string', 'max:32', Rule::exists('partner_profiles', 'referral_code')->where('status', 'active')],
             'academic_session' => ['required', 'array'],
             'academic_session.name' => ['required', 'string', 'max:100'],
             'academic_session.start_date' => ['required', 'date_format:Y-m-d'],

@@ -14,6 +14,11 @@ use Illuminate\Validation\ValidationException;
 
 class PartnerController extends Controller
 {
+    private function referralLink(string $code): string
+    {
+        return rtrim((string) config('app.frontend_url'), '/').'/ref/'.rawurlencode($code);
+    }
+
     private function profile(Request $request): PartnerProfile
     {
         $profile = $request->user()->partnerProfile;
@@ -36,7 +41,7 @@ class PartnerController extends Controller
                 'promotion_methods' => $profile->promotion_methods,
                 'tax_id_or_cnic' => $profile->tax_id_or_cnic,
                 'referral_code' => $profile->referral_code,
-                'referral_link' => url('/ref/'.$profile->referral_code),
+                'referral_link' => $this->referralLink($profile->referral_code),
                 'status' => $profile->status,
                 'commission_rate' => (float) $profile->commission_rate,
                 'terms_agreed_at' => $profile->terms_agreed_at,
@@ -68,13 +73,13 @@ class PartnerController extends Controller
                 'company_name' => $data['company_name'], 'phone' => $data['phone'],
                 'website_url' => $data['website_url'] ?? null, 'promotion_methods' => $data['promotion_methods'],
                 'tax_id_or_cnic' => $data['tax_id_or_cnic'], 'referral_code' => $code,
-                'status' => 'inactive', 'commission_rate' => 20, 'terms_agreed_at' => now(),
+                'status' => 'inactive', 'commission_rate' => 10, 'terms_agreed_at' => now(),
             ]);
         });
 
         return response()->json(['status' => 'success', 'message' => 'Partner profile setup successfully.', 'data' => [
             'user' => $request->user()->only(['id', 'name', 'email', 'is_institute', 'is_partner']),
-            'partner_profile' => ['id' => $profile->id, 'referral_code' => $profile->referral_code, 'referral_link' => url('/ref/'.$profile->referral_code), 'status' => $profile->status, 'commission_rate' => (float) $profile->commission_rate],
+            'partner_profile' => ['id' => $profile->id, 'referral_code' => $profile->referral_code, 'referral_link' => $this->referralLink($profile->referral_code), 'status' => $profile->status, 'commission_rate' => (float) $profile->commission_rate],
         ]], 201);
     }
 
@@ -111,7 +116,7 @@ class PartnerController extends Controller
                 'promotion_methods' => $profile->promotion_methods,
                 'tax_id_or_cnic' => $profile->tax_id_or_cnic,
                 'referral_code' => $profile->referral_code,
-                'referral_link' => url('/ref/'.$profile->referral_code),
+                'referral_link' => $this->referralLink($profile->referral_code),
                 'status' => $profile->status,
                 'commission_rate' => (float) $profile->commission_rate,
                 'terms_agreed_at' => $profile->terms_agreed_at,
@@ -145,7 +150,7 @@ class PartnerController extends Controller
         $signups = \App\Models\Institute::where('referral_id', $profile->referral_code);
 
         return response()->json(['status' => 'success', 'data' => [
-            'referral_link' => url('/ref/'.$profile->referral_code), 'referral_code' => $profile->referral_code,
+            'referral_link' => $this->referralLink($profile->referral_code), 'referral_code' => $profile->referral_code,
             'has_payout_details' => (bool) $profile->payout_method && (bool) $profile->payout_details,
             'metrics' => ['total_clicks' => PartnerClick::where('partner_profile_id', $profile->id)->count(), 'total_signups' => (clone $signups)->count(), 'active_subscriptions' => (clone $signups)->whereHas('subscription', fn ($q) => $q->where('status', 'active'))->count()],
             'wallet' => ['pending_clearance' => $pending, 'available_balance' => $available, 'total_withdrawn' => $withdrawn],

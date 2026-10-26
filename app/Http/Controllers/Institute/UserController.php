@@ -170,7 +170,6 @@ class UserController extends Controller
 
         $users = User::query()
             ->with(['roles' => fn ($query) => $query->where('roles.institute_id', $instituteId)])
-            ->withTrashed()
             ->where('is_admin', false)
             ->where('id', '!=', Auth::id())
             ->whereHas('instituteUsers', fn ($query) => $query->where('institute_id', $instituteId))

@@ -85,6 +85,9 @@ class InstituteController extends Controller
         $institute = DB::transaction(function () use ($request, $user) {
 
             $data = $request->validated();
+            // Referral attribution must come from a currently active partner.
+            // Never persist the legacy client-editable referral_id field.
+            unset($data['referral_id'], $data['ref_code']);
             $academicSession = $data['academic_session'];
             unset($data['academic_session']);
             $academicStructure = $data['academic_structure'] ?? [];
@@ -92,7 +95,7 @@ class InstituteController extends Controller
 
             $data = $this->handleFileUploads($data);
 
-            $referralCode = $request->cookie('partner_ref');
+            $referralCode = $request->validated('ref_code') ?: $request->cookie('partner_ref');
             if ($referralCode) {
                 $partner = \App\Models\PartnerProfile::query()
                     ->where('referral_code', $referralCode)
