@@ -187,14 +187,16 @@ class SuperAdminInstituteController extends Controller
                 ->lockForUpdate()
                 ->first() ?? new InstituteSubscription(['institute_id' => $invoice->institute_id]);
             $now = now();
-            $endsAt = $subscription->ends_at && $subscription->ends_at->isFuture()
+            $renewingSamePlan = (int) $subscription->plan_id === (int) $invoice->plan_id;
+            $carryForwardDays = $renewingSamePlan && $subscription->ends_at && $subscription->ends_at->isFuture();
+            $endsAt = $carryForwardDays
                 ? $subscription->ends_at->copy()
                 : $now->copy();
             $subscription->fill([
                 'plan_id' => $invoice->plan_id,
                 'status' => 'active',
                 'blocked' => false,
-                'starts_at' => $subscription->starts_at ?? $now,
+                'starts_at' => $carryForwardDays ? ($subscription->starts_at ?? $now) : $now,
                 'ends_at' => $invoice->billing_interval === 'yearly'
                     ? $endsAt->addYear()
                     : $endsAt->addMonth(),
