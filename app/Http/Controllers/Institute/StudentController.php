@@ -14,6 +14,7 @@ use App\Models\AcademicSection;
 use App\Models\AcademicSession;
 use App\Models\Enrollment;
 use App\Models\InstituteUser;
+use App\Models\InstituteSubscription;
 use App\Models\Student;
 use App\Services\NotificationService;
 use App\Services\ResponseService;
@@ -99,6 +100,11 @@ class StudentController extends Controller
         }
 
         $student = DB::transaction(function () use ($validated, $instituteId) {
+            $limitError = $this->studentLimitError($instituteId, 1, true);
+            if ($limitError !== null) {
+                return $limitError;
+            }
+
             $student = Student::create([
                 ...collect($validated)->except(['session_id', 'class_id', 'section_id', 'roll_number'])->all(),
                 'institute_id' => $instituteId,
@@ -114,6 +120,10 @@ class StudentController extends Controller
 
             return $student;
         });
+
+        if ($student instanceof JsonResponse) {
+            return $student;
+        }
 
         $className = AcademicClass::query()->whereKey($validated['class_id'])->value('name');
         $sectionName = AcademicSection::query()->whereKey($validated['section_id'] ?? 0)->value('name');
@@ -346,6 +356,11 @@ class StudentController extends Controller
         }
 
         $createdStudents = DB::transaction(function () use ($rowsToCreate, $instituteId, $sessionId) {
+            $limitError = $this->studentLimitError($instituteId, count($rowsToCreate), true);
+            if ($limitError !== null) {
+                return $limitError;
+            }
+
             $created = [];
             foreach ($rowsToCreate as $item) {
                 $student = Student::create([
@@ -379,6 +394,10 @@ class StudentController extends Controller
 
             return $created;
         });
+
+        if ($createdStudents instanceof JsonResponse) {
+            return $createdStudents;
+        }
 
         return ResponseService::success([
             'session_id' => $sessionId,
@@ -806,6 +825,42 @@ class StudentController extends Controller
         $instituteId = InstituteUser::query()->where('user_id', $request->user()->id)->where('is_active', true)->value('institute_id');
 
         return $instituteId === null ? null : (int) $instituteId;
+    }
+
+    private function studentLimitError(int $instituteId, int $newStudents, bool $lockSubscription = false): ?JsonResponse
+    {
+        $subscriptionQuery = InstituteSubscription::query()
+            ->where('institute_id', $instituteId)
+            ->latest();
+
+        if ($lockSubscription) {
+            $subscriptionQuery->lockForUpdate();
+        }
+
+        $subscription = $subscriptionQuery->first();
+        $limit = $subscription?->plan?->student_limit;
+
+        if ($limit === null) {
+            return null;
+        }
+
+        $currentStudents = Student::query()->where('institute_id', $instituteId)->count();
+        if ($currentStudents + $newStudents <= (int) $limit) {
+            return null;
+        }
+
+        return ResponseService::error(
+            'Student limit reached for your current plan. Please upgrade your plan to add more students.',
+            403,
+            null,
+            [
+                'reason' => 'student_limit_reached',
+                'upgrade_required' => true,
+                'student_limit' => (int) $limit,
+                'current_students' => $currentStudents,
+                'requested_students' => $newStudents,
+            ]
+        );
     }
 
     private function belongsToActiveInstitute(Request $request, Student $student): bool
