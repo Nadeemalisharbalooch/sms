@@ -7,6 +7,11 @@ use Illuminate\Validation\Rule;
 
 class CollectFeePaymentRequest extends FormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        $this->merge(['voucher_id' => $this->route('voucherId')]);
+    }
+
     public function authorize(): bool
     {
         return true;
@@ -15,17 +20,17 @@ class CollectFeePaymentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'fee_voucher_id' => ['required', 'integer', 'exists:fee_vouchers,id'],
-            'amount_paid' => ['required', 'numeric', 'gt:0'],
+            'voucher_id' => ['required', 'integer', 'exists:fee_vouchers,id'],
+            'paid_amount' => ['required', 'numeric', 'gt:0'],
             'payment_method' => ['required', Rule::in(['cash', 'bank'])],
-            'payment_date' => ['required', 'date'],
+            'waive_late_fee' => ['sometimes', 'boolean'],
         ];
     }
 
     public function messages(): array
     {
         return [
-            'amount_paid.gt' => 'The payment amount must be greater than zero.',
+            'paid_amount.gt' => 'The payment amount must be greater than zero.',
         ];
     }
 }

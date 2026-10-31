@@ -11,12 +11,15 @@ class FeeCategory extends Model
         'institute_id',
         'name',
         'description',
+        'type',
+        'default_months',
     ];
 
     protected function casts(): array
     {
         return [
             'institute_id' => 'integer',
+            'default_months' => 'array',
         ];
     }
 

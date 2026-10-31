@@ -7,13 +7,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class FeeStructure extends Model
 {
+    protected $table = 'class_fee_structures';
+
     protected $fillable = [
         'institute_id',
         'session_id',
         'class_id',
         'fee_category_id',
         'amount',
-        'recurrence',
+        'charge_months',
     ];
 
     protected function casts(): array
@@ -24,6 +26,7 @@ class FeeStructure extends Model
             'class_id' => 'integer',
             'fee_category_id' => 'integer',
             'amount' => 'float',
+            'charge_months' => 'array',
         ];
     }
 

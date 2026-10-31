@@ -15,6 +15,7 @@ class FeePaymentResource extends JsonResource
             'amount_paid' => $this->amount_paid,
             'payment_date' => $this->payment_date?->toDateString(),
             'payment_method' => $this->payment_method,
+            'late_fee_waived' => (bool) ($this->late_fee_waived ?? false),
             'collected_by_user_id' => $this->collected_by_user_id,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,

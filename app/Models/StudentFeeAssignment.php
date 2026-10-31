@@ -7,12 +7,16 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class StudentFeeAssignment extends Model
 {
+    protected $table = 'student_fee_addons';
+
     protected $fillable = [
         'institute_id',
         'session_id',
         'student_id',
         'fee_category_id',
         'amount',
+        'is_discount',
+        'charge_months',
     ];
 
     protected function casts(): array
@@ -23,6 +27,8 @@ class StudentFeeAssignment extends Model
             'student_id' => 'integer',
             'fee_category_id' => 'integer',
             'amount' => 'float',
+            'is_discount' => 'boolean',
+            'charge_months' => 'array',
         ];
     }
 

@@ -16,6 +16,9 @@ class FeeVoucher extends Model
         'billing_month',
         'due_date',
         'total_amount',
+        'late_fee_amount',
+        'late_fee_waived',
+        'carried_forward_amount',
         'paid_amount',
         'status',
     ];
@@ -28,6 +31,9 @@ class FeeVoucher extends Model
             'student_id' => 'integer',
             'due_date' => 'date',
             'total_amount' => 'float',
+            'late_fee_amount' => 'float',
+            'late_fee_waived' => 'boolean',
+            'carried_forward_amount' => 'float',
             'paid_amount' => 'float',
         ];
     }
@@ -49,7 +55,7 @@ class FeeVoucher extends Model
 
     public function items(): HasMany
     {
-        return $this->hasMany(FeeVoucherItem::class);
+        return $this->hasMany(FeeVoucherItem::class, 'voucher_id');
     }
 
     public function payments(): HasMany
@@ -59,6 +65,11 @@ class FeeVoucher extends Model
 
     public function getBalanceDueAttribute(): float
     {
-        return round($this->total_amount - $this->paid_amount, 2);
+        $lateFee = ! $this->late_fee_waived && now()->toDateString() > $this->due_date?->toDateString()
+            && (float) $this->paid_amount < (float) $this->total_amount
+            ? (float) ($this->late_fee_amount ?? 0)
+            : 0;
+
+        return round(max(0, $this->total_amount + $lateFee - $this->paid_amount - (float) ($this->carried_forward_amount ?? 0)), 2);
     }
 }

@@ -14,6 +14,8 @@ class FeeCategoryResource extends JsonResource
             'institute_id' => $this->institute_id,
             'name' => $this->name,
             'description' => $this->description,
+            'type' => $this->type,
+            'default_months' => $this->default_months ?? [],
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

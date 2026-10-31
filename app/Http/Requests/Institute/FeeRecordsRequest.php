@@ -28,7 +28,7 @@ class FeeRecordsRequest extends FormRequest
             'class_id' => ['nullable', 'integer', 'exists:classes,id'],
             'section_id' => ['nullable', 'integer', 'exists:sections,id'],
             'student_id' => ['nullable', 'integer', 'exists:students,id'],
-            'status' => ['nullable', 'string', Rule::in(['unpaid', 'paid', 'partial', 'partially_paid', 'overdue', 'cancelled'])],
+            'status' => ['nullable', 'string', Rule::in(['unpaid', 'paid', 'partial', 'partially_paid', 'overdue', 'cancelled', 'carried_forward'])],
             'billing_month' => ['nullable', 'string', 'regex:/^\d{4}-\d{2}$/'],
             'due_date_from' => ['nullable', 'date', 'date_format:Y-m-d'],
             'due_date_to' => ['nullable', 'date', 'date_format:Y-m-d', 'after_or_equal:due_date_from'],

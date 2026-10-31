@@ -22,10 +22,12 @@ use App\Models\FeeCategory;
 use App\Models\FeePayment;
 use App\Models\FeeStructure;
 use App\Models\FeeVoucher;
+use App\Models\FinancialSetting;
 use App\Models\Institute;
 use App\Models\InstituteUser;
 use App\Models\Student;
 use App\Models\StudentFeeAssignment;
+use App\Models\StudentOneTimeFee;
 use App\Services\ResponseService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -57,6 +59,34 @@ class FeeController extends Controller
         );
     }
 
+    public function financialSettings(Request $request): JsonResponse
+    {
+        $instituteId = $this->activeInstituteId($request);
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $settings = FinancialSetting::firstOrCreate(['institute_id' => $instituteId]);
+
+        return ResponseService::success($settings, 'Financial settings retrieved successfully');
+    }
+
+    public function updateFinancialSettings(Request $request): JsonResponse
+    {
+        $instituteId = $this->activeInstituteId($request);
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $validated = $request->validate([
+            'late_fee_type' => ['required', 'in:fixed,percentage'],
+            'late_fee_value' => ['required', 'numeric', 'min:0'],
+        ]);
+        $settings = FinancialSetting::updateOrCreate(['institute_id' => $instituteId], $validated);
+
+        return ResponseService::success($settings, 'Financial settings updated successfully');
+    }
+
     public function storeCategory(StoreFeeCategoryRequest $request): JsonResponse
     {
         $instituteId = $this->activeInstituteId($request);
@@ -66,6 +96,12 @@ class FeeController extends Controller
         }
 
         $validated = $request->validated();
+
+        if ($validated['type'] === 'one_time' && $validated['default_months'] !== []) {
+            return ResponseService::error('Validation failed', 422, [
+                'default_months' => ['One-time fee categories must have an empty default_months array.'],
+            ]);
+        }
 
         if (FeeCategory::query()->where('institute_id', $instituteId)->where('name', $validated['name'])->exists()) {
             return ResponseService::error(
@@ -77,6 +113,7 @@ class FeeController extends Controller
 
         $category = FeeCategory::create([
             ...$validated,
+            'default_months' => ($validated['type'] ?? 'recurring') === 'one_time' ? [] : ($validated['default_months'] ?? []),
             'institute_id' => $instituteId,
         ]);
 
@@ -106,7 +143,18 @@ class FeeController extends Controller
         $validated = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:150'],
             'description' => ['sometimes', 'nullable', 'string', 'max:500'],
+            'type' => ['sometimes', 'required', 'in:recurring,one_time'],
+            'default_months' => ['sometimes', 'array'],
+            'default_months.*' => ['string', 'in:Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec'],
         ]);
+
+        if (($validated['type'] ?? $category->type) === 'one_time'
+            && isset($validated['default_months'])
+            && $validated['default_months'] !== []) {
+            return ResponseService::error('Validation failed', 422, [
+                'default_months' => ['One-time fee categories must have an empty default_months array.'],
+            ]);
+        }
 
         if (isset($validated['name'])
             && FeeCategory::query()
@@ -122,6 +170,9 @@ class FeeController extends Controller
         }
 
         $category->update($validated);
+        if (($validated['type'] ?? $category->type) === 'one_time' && ! array_key_exists('default_months', $validated)) {
+            $category->update(['default_months' => []]);
+        }
 
         return ResponseService::success(
             new FeeCategoryResource($category->fresh()),
@@ -150,6 +201,10 @@ class FeeController extends Controller
             ->where('fee_category_id', $category->id)
             ->exists()
             || StudentFeeAssignment::query()
+                ->where('institute_id', $instituteId)
+                ->where('fee_category_id', $category->id)
+                ->exists()
+            || StudentOneTimeFee::query()
                 ->where('institute_id', $instituteId)
                 ->where('fee_category_id', $category->id)
                 ->exists();
@@ -200,7 +255,7 @@ class FeeController extends Controller
         );
     }
 
-    public function storeFeeStructure(StoreFeeStructureRequest $request): JsonResponse
+    public function storeFeeStructure(StoreFeeStructureRequest $request, ?int $classId = null): JsonResponse
     {
         $instituteId = $this->activeInstituteId($request);
 
@@ -217,6 +272,8 @@ class FeeController extends Controller
         }
 
         $validated = $request->validated();
+        $categoryDefaults = FeeCategory::query()->find($validated['fee_category_id'])?->default_months;
+        $validated['charge_months'] ??= $categoryDefaults ?? [];
 
         $error = $this->validateClassAndCategoryBelongToInstitute($instituteId, $validated);
 
@@ -224,7 +281,7 @@ class FeeController extends Controller
             return $error;
         }
 
-        $structure = DB::transaction(function () use ($instituteId, $sessionId, $validated) {
+        $structure = DB::transaction(function () use ($instituteId, $sessionId, $validated, $categoryDefaults) {
             return FeeStructure::query()->updateOrCreate(
                 [
                     'session_id' => $sessionId,
@@ -234,7 +291,7 @@ class FeeController extends Controller
                 [
                     'institute_id' => $instituteId,
                     'amount' => $validated['amount'],
-                    'recurrence' => $validated['recurrence'],
+                    'charge_months' => $validated['charge_months'],
                 ]
             );
         });
@@ -301,7 +358,7 @@ class FeeController extends Controller
         );
     }
 
-    public function storeStudentAssignment(StoreStudentFeeAssignmentRequest $request): JsonResponse
+    public function storeStudentAssignment(StoreStudentFeeAssignmentRequest $request, ?int $studentId = null): JsonResponse
     {
         $instituteId = $this->activeInstituteId($request);
 
@@ -325,6 +382,27 @@ class FeeController extends Controller
             return $error;
         }
 
+        $category = FeeCategory::query()->findOrFail($validated['fee_category_id']);
+        if (($category->type ?? 'recurring') === 'one_time') {
+            if ($validated['is_discount']) {
+                return ResponseService::error('Validation failed', 422, [
+                    'is_discount' => ['One-time fees must be charges.'],
+                ]);
+            }
+
+            $fee = StudentOneTimeFee::create([
+                'institute_id' => $instituteId,
+                'session_id' => $sessionId,
+                'student_id' => $validated['student_id'],
+                'fee_category_id' => $validated['fee_category_id'],
+                'amount' => abs((float) $validated['amount']),
+            ]);
+
+            return ResponseService::success($fee, 'Student one-time fee created successfully', 201);
+        }
+
+        $validated['charge_months'] ??= $category->default_months ?? [];
+
         $assignment = DB::transaction(function () use ($instituteId, $sessionId, $validated) {
             return StudentFeeAssignment::query()->updateOrCreate(
                 [
@@ -335,6 +413,8 @@ class FeeController extends Controller
                 [
                     'institute_id' => $instituteId,
                     'amount' => $validated['amount'],
+                    'is_discount' => $validated['is_discount'] ?? ((float) $validated['amount'] < 0),
+                    'charge_months' => $validated['charge_months'] ?? null,
                 ]
             );
         });
@@ -388,51 +468,10 @@ class FeeController extends Controller
         }
 
         $validated = $request->validated();
-        $classId = $validated['class_id'] ?? null;
         $billingMonth = $validated['billing_month'];
         $dueDate = $validated['due_date'];
-        $feeCategoryIds = $validated['fee_category_ids'] ?? null;
-        $studentIds = $validated['student_ids'] ?? null;
 
-        if ($classId !== null && ! AcademicClass::query()->whereKey($classId)->where('institute_id', $instituteId)->exists()) {
-            return ResponseService::error(
-                'Validation failed',
-                422,
-                ['class_id' => ['The selected class does not belong to the active institute.']]
-            );
-        }
-
-        if (! empty($feeCategoryIds)) {
-            $validCategoryCount = FeeCategory::query()
-                ->where('institute_id', $instituteId)
-                ->whereIn('id', $feeCategoryIds)
-                ->count();
-
-            if ($validCategoryCount !== count(array_unique($feeCategoryIds))) {
-                return ResponseService::error(
-                    'Validation failed',
-                    422,
-                    ['fee_category_ids' => ['One or more selected fee categories do not belong to the active institute.']]
-                );
-            }
-        }
-
-        if (! empty($studentIds)) {
-            $validStudentCount = Student::query()
-                ->where('institute_id', $instituteId)
-                ->whereIn('id', $studentIds)
-                ->count();
-
-            if ($validStudentCount !== count(array_unique($studentIds))) {
-                return ResponseService::error(
-                    'Validation failed',
-                    422,
-                    ['student_ids' => ['One or more selected students do not belong to the active institute.']]
-                );
-            }
-        }
-
-        $counts = DB::transaction(function () use ($instituteId, $sessionId, $classId, $billingMonth, $dueDate, $feeCategoryIds, $studentIds) {
+        $counts = DB::transaction(function () use ($instituteId, $sessionId, $billingMonth, $dueDate) {
             // Serialize voucher generation within a session. Without this lock,
             // simultaneous requests can both decide that a voucher is missing
             // and then violate the unique session/student/month constraint.
@@ -444,17 +483,16 @@ class FeeController extends Controller
             // The batch_id column is a UUID, so use a database-compatible
             // identifier instead of a prefixed string.
             $batchId = (string) Str::uuid();
+            $targetMonth = date('M', strtotime($billingMonth.'-01'));
+            $financialSettings = FinancialSetting::firstOrCreate(['institute_id' => $instituteId]);
 
             $students = Student::query()
                 ->where('institute_id', $instituteId)
-                ->when(! empty($studentIds), fn ($query) => $query->whereIn('id', $studentIds))
-                ->whereHas('enrollments', function ($query) use ($sessionId, $classId) {
-                    $query->where('session_id', $sessionId)
-                        ->when($classId !== null, fn ($classQuery) => $classQuery->where('class_id', $classId));
+                ->whereHas('enrollments', function ($query) use ($sessionId) {
+                    $query->where('session_id', $sessionId);
                 })
-                ->with(['enrollments' => function ($query) use ($sessionId, $classId) {
-                    $query->where('session_id', $sessionId)
-                        ->when($classId !== null, fn ($classQuery) => $classQuery->where('class_id', $classId));
+                ->with(['enrollments' => function ($query) use ($sessionId) {
+                    $query->where('session_id', $sessionId);
                 }])
                 ->get();
 
@@ -466,45 +504,37 @@ class FeeController extends Controller
             $classIds = $students->pluck('enrollments')->flatten()->pluck('class_id')->unique()->filter();
             $studentIds = $students->pluck('id');
 
-            $classFeesQuery = FeeStructure::query()
+            $classFees = FeeStructure::query()
                 ->where('session_id', $sessionId)
                 ->whereIn('class_id', $classIds)
-                ->with('feeCategory');
-
-            if (! empty($feeCategoryIds)) {
-                $classFeesQuery->whereIn('fee_category_id', $feeCategoryIds);
-            }
-
-            $classFees = $classFeesQuery
+                ->with('feeCategory')
                 ->get()
                 ->groupBy('class_id');
 
-            $studentFeesQuery = StudentFeeAssignment::query()
+            $studentFees = StudentFeeAssignment::query()
                 ->where('session_id', $sessionId)
                 ->whereIn('student_id', $studentIds)
-                ->with('feeCategory');
-
-            if (! empty($feeCategoryIds)) {
-                $studentFeesQuery->whereIn('fee_category_id', $feeCategoryIds);
-            }
-
-            $studentFees = $studentFeesQuery
+                ->with('feeCategory')
                 ->get()
                 ->groupBy('student_id');
 
-            // Yearly and one-time class fees are charged only once per student
-            // within an academic session. Voucher items retain the fee name, which
-            // is unique per institute through fee_categories.
-            $alreadyChargedNonMonthlyFees = FeeVoucher::query()
+            $oneTimeFeesQuery = StudentOneTimeFee::query()
+                ->where('institute_id', $instituteId)
                 ->where('session_id', $sessionId)
                 ->whereIn('student_id', $studentIds)
-                ->with('items:id,fee_voucher_id,fee_name')
+                ->where('is_billed', false)
+                ->with('feeCategory');
+            $oneTimeFees = $oneTimeFeesQuery->get()->groupBy('student_id');
+
+            $arrears = FeeVoucher::query()
+                ->where('institute_id', $instituteId)
+                ->where('session_id', $sessionId)
+                ->whereIn('student_id', $studentIds)
+                ->where('billing_month', '<', $billingMonth)
+                ->whereIn('status', ['unpaid', 'partial', 'overdue'])
                 ->get()
-                ->groupBy('student_id')
-                ->map(fn ($vouchers) => $vouchers
-                    ->flatMap(fn (FeeVoucher $voucher) => $voucher->items->pluck('fee_name'))
-                    ->unique()
-                    ->values());
+                ->filter(fn (FeeVoucher $voucher) => $voucher->balance_due > 0)
+                ->groupBy('student_id');
 
             $generatedCount = 0;
             $skippedCount = 0;
@@ -521,34 +551,55 @@ class FeeController extends Controller
 
                 $lineItems = collect();
 
-                // Sum of standard Class fee_structures
-                $chargedNonMonthlyFees = $alreadyChargedNonMonthlyFees->get($student->id, collect());
-
+                // Class charges apply only when the billing month is selected.
                 collect($classFees->get($classIdForStudent, collect()))
-                    ->each(function (FeeStructure $structure) use ($lineItems, $chargedNonMonthlyFees) {
+                    ->each(function (FeeStructure $structure) use ($lineItems, $targetMonth) {
                         $feeName = $structure->feeCategory?->name ?? 'Fee';
-
-                        if ($structure->recurrence !== 'monthly' && $chargedNonMonthlyFees->contains($feeName)) {
+                        if (! in_array($targetMonth, $structure->charge_months ?? [], true)) {
                             return;
                         }
 
                         $lineItems->push([
-                            'fee_name' => $feeName,
+                            'description' => $feeName,
                             'amount' => (float) $structure->amount,
+                            'type' => 'charge',
                         ]);
                     });
 
-                // Sum of optional Student fee_assignments
+                // Student-specific add-ons and discounts follow their own month map.
                 collect($studentFees->get($student->id, collect()))
-                    ->each(function (StudentFeeAssignment $assignment) use ($lineItems) {
+                    ->each(function (StudentFeeAssignment $assignment) use ($lineItems, $targetMonth) {
+                        if (! in_array($targetMonth, $assignment->charge_months ?? [], true)) {
+                            return;
+                        }
                         $lineItems->push([
-                            'fee_name' => $assignment->feeCategory?->name ?? 'Fee',
-                            'amount' => (float) $assignment->amount,
+                            'description' => $assignment->feeCategory?->name ?? 'Fee',
+                            'amount' => abs((float) $assignment->amount),
+                    'type' => $assignment->is_discount ? 'discount' : 'charge',
                         ]);
                     });
 
-                // If specific fee categories were requested and this student has no matching fees, skip
-                if (! empty($feeCategoryIds) && $lineItems->isEmpty()) {
+                foreach ($oneTimeFees->get($student->id, collect()) as $oneTimeFee) {
+                    $lineItems->push([
+                        'description' => $oneTimeFee->feeCategory?->name ?? 'Fee',
+                        'amount' => (float) $oneTimeFee->amount,
+                        'type' => 'charge',
+                    ]);
+                }
+
+                foreach ($arrears->get($student->id, collect()) as $previousVoucher) {
+                    $remaining = (float) $previousVoucher->balance_due;
+                    if ($remaining > 0) {
+                        $lineItems->push([
+                            'description' => 'Arrears: '.$previousVoucher->billing_month,
+                            'amount' => $remaining,
+                            'type' => 'charge',
+                        ]);
+                    }
+                }
+
+                // Students with no charges, add-ons, one-time fees, or arrears need no voucher.
+                if ($lineItems->isEmpty()) {
                     $skippedCount++;
 
                     continue;
@@ -558,16 +609,20 @@ class FeeController extends Controller
                 // for the same category. Store one line per fee name so a
                 // voucher never contains duplicate-looking items.
                 $lineItems = $lineItems
-                    ->groupBy('fee_name')
-                    ->map(fn ($items, $feeName) => [
-                        'fee_name' => $feeName,
+                    ->groupBy(fn ($item) => $item['description'].'|'.$item['type'])
+                    ->map(fn ($items) => [
+                        'description' => $items->first()['description'],
                         'amount' => round((float) $items->sum('amount'), 2),
+                        'type' => $items->first()['type'],
                     ])
                     ->values();
 
                 // A full discount can produce a zero-value voucher, but it must
                 // still be generated so the billing run remains complete.
-                $totalAmount = max(0, (float) $lineItems->sum('amount'));
+                $totalAmount = max(0, (float) $lineItems->where('type', 'charge')->sum('amount') - (float) $lineItems->where('type', 'discount')->sum('amount'));
+                $lateFeeAmount = $totalAmount <= 0 ? 0 : ($financialSettings->late_fee_type === 'percentage'
+                    ? round($totalAmount * (float) $financialSettings->late_fee_value / 100, 2)
+                    : (float) $financialSettings->late_fee_value);
 
                 $voucher = FeeVoucher::create([
                     'institute_id' => $instituteId,
@@ -577,12 +632,24 @@ class FeeController extends Controller
                     'billing_month' => $billingMonth,
                     'due_date' => $dueDate,
                     'total_amount' => $totalAmount,
+                    'late_fee_amount' => $lateFeeAmount,
                     'paid_amount' => 0,
                     'status' => $totalAmount === 0.0 ? 'paid' : 'unpaid',
                 ]);
 
                 foreach ($lineItems as $item) {
                     $voucher->items()->create($item);
+                }
+
+                foreach ($oneTimeFees->get($student->id, collect()) as $oneTimeFee) {
+                    $oneTimeFee->update(['is_billed' => true]);
+                }
+
+                foreach ($arrears->get($student->id, collect()) as $previousVoucher) {
+                    $previousVoucher->update([
+                        'carried_forward_amount' => (float) $previousVoucher->carried_forward_amount + (float) $previousVoucher->balance_due,
+                        'status' => 'carried_forward',
+                    ]);
                 }
 
                 $generatedCount++;
@@ -760,7 +827,7 @@ class FeeController extends Controller
                 ] : null,
                 'items' => $voucher->items->map(fn ($item) => [
                     'id' => $item->id,
-                    'fee_name' => $item->fee_name,
+                    'description' => $item->description,
                     'amount' => $item->amount,
                 ]),
                 'created_at' => $voucher->created_at?->toISOString(),
@@ -1139,7 +1206,7 @@ class FeeController extends Controller
             'query' => ['nullable', 'string', 'max:100'],
             'roll_number' => ['nullable', 'string', 'max:100'],
             'billing_month' => ['nullable', 'string', 'regex:/^\d{4}-\d{2}$/'],
-            'status' => ['nullable', 'string', 'in:unpaid,paid,partially_paid,partial,overdue,cancelled'],
+            'status' => ['nullable', 'string', 'in:unpaid,paid,partially_paid,partial,overdue,cancelled,carried_forward'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:500'],
             'page' => ['nullable', 'integer', 'min:1'],
         ]);
@@ -1490,92 +1557,54 @@ class FeeController extends Controller
             return ResponseService::error('No active institute is associated with this user', 422);
         }
 
-        $sessionId = $request->filled('session_id')
-            ? (int) $request->input('session_id')
-            : $this->activeSessionId($instituteId);
-
-        if ($sessionId === null && ! $request->boolean('all_sessions')) {
+        $sessionId = $this->activeSessionId($instituteId);
+        if ($sessionId === null) {
             return ResponseService::error('Validation failed', 422, [
                 'session_id' => ['No active academic session exists for the active institute.'],
             ]);
         }
 
         $validated = $request->validate([
-            'student_id' => ['required', 'integer'],
-            'session_id' => ['nullable', 'integer'],
-            'status' => ['nullable', 'string', 'in:unpaid,paid,partially_paid,partial,overdue,cancelled'],
-            'billing_month' => ['nullable', 'string', 'regex:/^\d{4}-\d{2}$/'],
+            'month' => ['required', 'date_format:Y-m'],
         ]);
 
-        $student = Student::query()
-            ->where('institute_id', $instituteId)
-            ->whereKey($validated['student_id'])
-            ->first();
-
-        if ($student === null) {
-            return ResponseService::error('Student not found', 404, [
-                'student_id' => ['The selected student does not belong to the active institute.'],
-            ]);
-        }
-
-        $statusFilter = $validated['status'] ?? null;
-        if ($statusFilter === 'partially_paid') {
-            $statusFilter = 'partial';
-        }
-
+        $month = $validated['month'];
         $vouchers = FeeVoucher::query()
             ->where('institute_id', $instituteId)
-            ->where('student_id', $student->id)
-            ->when(! $request->boolean('all_sessions') && $sessionId !== null, fn ($query) => $query->where('session_id', $sessionId))
-            ->when($statusFilter !== null, fn ($query) => $query->where('status', $statusFilter))
-            ->when($request->filled('billing_month'), fn ($query) => $query->where('billing_month', $validated['billing_month']))
-            ->with('items')
-            ->orderByDesc('billing_month')
-            ->orderByDesc('id')
-            ->get();
+            ->where('session_id', $sessionId)
+            ->where('billing_month', $month)
+            ->with(['student.enrollments' => fn ($query) => $query->where('session_id', $sessionId)->with('academicClass'), 'items'])
+            ->orderBy('student_id')
+            ->get()
+            ->map(function (FeeVoucher $voucher) {
+                $student = $voucher->student;
+                $enrollment = $student?->enrollments?->first();
 
-        $studentData = $student->load([
-            'enrollments' => function ($query) use ($sessionId) {
-                $query->when($sessionId !== null, fn ($q) => $q->where('session_id', $sessionId))
-                    ->with(['academicClass', 'section', 'session']);
-            },
-        ]);
-        $enrollment = $studentData->enrollments->first() ?? $student->enrollments()->with(['academicClass', 'section', 'session'])->latest('id')->first();
+                return [
+                    'voucher_id' => $voucher->id,
+                    'student_name' => trim(($student?->first_name ?? '').' '.($student?->last_name ?? '')),
+                    'class_name' => $enrollment?->academicClass?->name,
+                    'due_date' => $voucher->due_date?->toDateString(),
+                    'total_amount' => $voucher->total_amount,
+                    'late_fee_amount' => $voucher->late_fee_amount,
+                    'total_after_due_date' => round((float) $voucher->total_amount + (float) $voucher->late_fee_amount, 2),
+                    'status' => $voucher->status,
+                    'items' => $voucher->items->map(fn ($item) => [
+                        'description' => $item->description,
+                        'amount' => $item->amount,
+                        'type' => $item->type,
+                    ])->values(),
+                ];
+            });
 
-        $feesSummary = [
-            'total_vouchers' => $vouchers->count(),
-            'total_amount' => round((float) $vouchers->sum('total_amount'), 2),
-            'total_paid' => round((float) $vouchers->sum('paid_amount'), 2),
-            'total_due' => round((float) $vouchers->sum('balance_due'), 2),
-            'paid_vouchers_count' => $vouchers->where('status', 'paid')->count(),
-            'unpaid_vouchers_count' => $vouchers->where('status', 'unpaid')->count(),
-            'partially_paid_vouchers_count' => $vouchers->whereIn('status', ['partially_paid', 'partial'])->count(),
-            'overdue_vouchers_count' => $vouchers->where('status', 'overdue')->count(),
-        ];
-
-        return ResponseService::success([
-            'student' => [
-                'id' => $student->id,
-                'name' => trim($student->first_name.' '.$student->last_name),
-                'first_name' => $student->first_name,
-                'last_name' => $student->last_name,
-                'roll_number' => $enrollment?->roll_number,
-                'class' => $enrollment?->academicClass?->name ?? 'N/A',
-                'section' => $enrollment?->section?->name ?? 'N/A',
-                'session' => $enrollment?->session?->name ?? 'N/A',
-                'guardian_name' => $student->guardian_name,
-                'guardian_phone' => $student->guardian_phone,
-            ],
-            'fees_summary' => $feesSummary,
-            'vouchers' => FeeVoucherResource::collection($vouchers),
-        ], 'Student fee vouchers retrieved successfully');
+        return ResponseService::success($vouchers, 'Fee vouchers retrieved successfully');
     }
 
     // =====================================================================
     // API 6: Collect Payment
     // =====================================================================
 
-    public function collect(CollectFeePaymentRequest $request): JsonResponse
+    public function collect(CollectFeePaymentRequest $request, ?int $voucherId = null): JsonResponse
     {
         $instituteId = $this->activeInstituteId($request);
 
@@ -1592,22 +1621,29 @@ class FeeController extends Controller
         }
 
         $validated = $request->validated();
-        $amountPaid = (float) $validated['amount_paid'];
+        $amountPaid = (float) $validated['paid_amount'];
+        $waiveLateFee = (bool) ($validated['waive_late_fee'] ?? false);
         $collectedByUserId = $request->user()->id;
+        $paymentDate = now()->toDateString();
 
-        $result = DB::transaction(function () use ($instituteId, $sessionId, $validated, $amountPaid, $collectedByUserId) {
+        $result = DB::transaction(function () use ($instituteId, $sessionId, $validated, $amountPaid, $waiveLateFee, $collectedByUserId, $paymentDate) {
             $voucher = FeeVoucher::query()
                 ->where('institute_id', $instituteId)
                 ->where('session_id', $sessionId)
                 ->with('items')
                 ->lockForUpdate()
-                ->find($validated['fee_voucher_id']);
+                ->find($validated['voucher_id']);
 
             if ($voucher === null) {
                 return null;
             }
 
-            $balanceDue = (float) $voucher->balance_due;
+            $lateFeeApplies = now()->toDateString() > $voucher->due_date->toDateString()
+                && ! $voucher->late_fee_waived
+                && (float) $voucher->paid_amount < (float) $voucher->total_amount;
+            $lateFeeDue = $lateFeeApplies && ! $waiveLateFee ? (float) $voucher->late_fee_amount : 0.0;
+            $requiredAmount = (float) $voucher->total_amount + $lateFeeDue;
+            $balanceDue = max(0, $requiredAmount - (float) $voucher->paid_amount);
 
             if ($balanceDue <= 0) {
                 return ['error' => 'This voucher has already been fully paid.'];
@@ -1621,8 +1657,9 @@ class FeeController extends Controller
                 'institute_id' => $instituteId,
                 'fee_voucher_id' => $voucher->id,
                 'amount_paid' => $amountPaid,
-                'payment_date' => $validated['payment_date'],
+                'payment_date' => $paymentDate,
                 'payment_method' => $validated['payment_method'],
+                'late_fee_waived' => $waiveLateFee && $lateFeeApplies,
                 'collected_by_user_id' => $collectedByUserId,
             ]);
 
@@ -1630,7 +1667,8 @@ class FeeController extends Controller
 
             $voucher->update([
                 'paid_amount' => $newPaidAmount,
-                'status' => $newPaidAmount >= (float) $voucher->total_amount ? 'paid' : 'partial',
+                'late_fee_waived' => $voucher->late_fee_waived || ($waiveLateFee && $lateFeeApplies),
+                'status' => $newPaidAmount >= ($waiveLateFee && $lateFeeApplies ? (float) $voucher->total_amount : $requiredAmount) ? 'paid' : 'partial',
             ]);
 
             return ['payment' => $payment, 'voucher' => $voucher];
@@ -1641,7 +1679,7 @@ class FeeController extends Controller
         }
 
         if (isset($result['error'])) {
-            return ResponseService::error('Validation failed', 422, ['amount_paid' => [$result['error']]]);
+            return ResponseService::error('Validation failed', 422, ['paid_amount' => [$result['error']]]);
         }
 
         return ResponseService::success(
@@ -1780,9 +1818,9 @@ class FeeController extends Controller
                     'guardian_phone' => $student->guardian_phone,
                 ] : null,
                 'items' => $voucher->items
-                    ->groupBy('fee_name')
-                    ->map(fn ($items, $feeName) => [
-                        'fee_name' => $feeName,
+                    ->groupBy('description')
+                    ->map(fn ($items, $description) => [
+                        'description' => $description,
                         'amount' => round((float) $items->sum('amount'), 2),
                     ])
                     ->values(),
@@ -1817,13 +1855,14 @@ class FeeController extends Controller
                 'total_vouchers' => (int) ($summary->total_vouchers ?? 0),
                 'total_amount' => round((float) ($summary->total_amount ?? 0), 2),
                 'total_paid' => round((float) ($summary->total_paid ?? 0), 2),
-                'total_due' => round((float) ($summary->total_due ?? 0), 2),
+                'total_due' => round((float) $records->sum(fn (FeeVoucher $voucher) => $voucher->balance_due), 2),
                 'status_counts' => [
                     'unpaid_count' => (int) $statusCounts->get('unpaid', 0),
                     'partial_count' => (int) $statusCounts->get('partial', 0),
                     'paid_count' => (int) $statusCounts->get('paid', 0),
                     'overdue_count' => (int) $statusCounts->get('overdue', 0),
                     'cancelled_count' => (int) $statusCounts->get('cancelled', 0),
+                    'carried_forward_count' => (int) $statusCounts->get('carried_forward', 0),
                 ],
             ],
             'records' => $records->values(),

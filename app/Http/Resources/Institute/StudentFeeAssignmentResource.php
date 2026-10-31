@@ -17,6 +17,8 @@ class StudentFeeAssignmentResource extends JsonResource
             'fee_category_id' => $this->fee_category_id,
             'fee_category_name' => $this->whenLoaded('feeCategory', fn () => $this->feeCategory->name),
             'amount' => $this->amount,
+            'is_discount' => (bool) $this->is_discount,
+            'charge_months' => $this->charge_months ?? [],
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

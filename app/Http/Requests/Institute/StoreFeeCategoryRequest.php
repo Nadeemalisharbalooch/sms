@@ -16,6 +16,9 @@ class StoreFeeCategoryRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:150'],
             'description' => ['nullable', 'string', 'max:500'],
+            'type' => ['required', 'in:recurring,one_time'],
+            'default_months' => ['required', 'array'],
+            'default_months.*' => ['string', 'in:Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec'],
         ];
     }
 }

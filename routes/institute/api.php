@@ -8,7 +8,6 @@ use App\Http\Controllers\Institute\AttendanceReportController;
 use App\Http\Controllers\Institute\ClassSubjectController;
 use App\Http\Controllers\Institute\DashboardController;
 use App\Http\Controllers\Institute\FeeController;
-use App\Http\Controllers\Institute\FeeReportController;
 use App\Http\Controllers\Institute\EmailChangeController;
 use App\Http\Controllers\Institute\InstituteController;
 use App\Http\Controllers\Institute\NotificationController;
@@ -410,110 +409,20 @@ Route::middleware(['auth:sanctum', 'email.verified', 'active.institute.subscript
     // Module 6: Smart Fees Management
     // =====================================================================
 
-    // API 1: Fee Categories (within fee-setup.view / .manage)
-    Route::get('institutes/fee-categories', [FeeController::class, 'indexCategories'])
-        ->middleware('permission:fee-setup.view')
-        ->name('institutes.fee-categories.index');
-    Route::post('institutes/fee-categories', [FeeController::class, 'storeCategory'])
-        ->middleware('permission:fee-setup.manage')
-        ->name('institutes.fee-categories.store');
-    Route::patch('institutes/fee-categories/{categoryId}', [FeeController::class, 'updateCategory'])
-        ->middleware('permission:fee-setup.manage')
-        ->name('institutes.fee-categories.update');
-    Route::delete('institutes/fee-categories/{categoryId}', [FeeController::class, 'destroyCategory'])
-        ->middleware('permission:fee-setup.manage')
-        ->name('institutes.fee-categories.destroy');
-
-    // API 2: Class Fee Structures (within fee-setup.view / .manage)
-    Route::get('institutes/fee-structures', [FeeController::class, 'indexFeeStructures'])
-        ->middleware('permission:fee-setup.view')
-        ->name('institutes.fee-structures.index');
-    Route::post('institutes/fee-structures', [FeeController::class, 'storeFeeStructure'])
-        ->middleware('permission:fee-setup.manage')
-        ->name('institutes.fee-structures.store');
-    Route::delete('institutes/fee-structures/{structureId}', [FeeController::class, 'destroyFeeStructure'])
-        ->middleware('permission:fee-setup.manage')
-        ->name('institutes.fee-structures.destroy');
-
-    // API 3: Student-Specific Fee Assignments (within fee-setup.view / .manage)
-    Route::get('institutes/fees/student-assignments', [FeeController::class, 'indexStudentAssignments'])
-        ->middleware('permission:fee-setup.view')
-        ->name('institutes.fees.student-assignments.index');
-    Route::post('institutes/fees/student-assignments', [FeeController::class, 'storeStudentAssignment'])
-        ->middleware('permission:fee-setup.manage')
-        ->name('institutes.fees.student-assignments.store');
-    Route::delete('institutes/fees/student-assignments/{assignmentId}', [FeeController::class, 'destroyStudentAssignment'])
-        ->middleware('permission:fee-setup.manage')
-        ->name('institutes.fees.student-assignments.destroy');
-
-    // API 4: Smart Bulk Voucher Generation (fee-vouchers.view / .generate / .delete)
-    Route::get('institutes/fees/generate-vouchers', [FeeController::class, 'indexGenerateVouchers'])
-        ->middleware('permission:fee-vouchers.view')
-        ->name('institutes.fees.generate-vouchers.index');
-    Route::post('institutes/fees/generate-vouchers', [FeeController::class, 'generateVouchers'])
-        ->middleware('permission:fee-vouchers.generate')
-        ->name('institutes.fees.generate-vouchers');
-    Route::delete('institutes/fees/generate-vouchers', [FeeController::class, 'destroyVouchers'])
-        ->middleware('permission:fee-vouchers.delete')
-        ->name('institutes.fees.generate-vouchers.destroy');
-    Route::delete('institutes/fees/generate-vouchers/{voucherId}', [FeeController::class, 'destroyVoucher'])
-        ->middleware('permission:fee-vouchers.delete')
-        ->name('institutes.fees.generate-vouchers.destroySingle');
-    Route::delete('institutes/fees/generate-vouchers/batch/{batchId}', [FeeController::class, 'destroyVouchersByBatch'])
-        ->middleware('permission:fee-vouchers.delete')
-        ->name('institutes.fees.generate-vouchers.destroyBatch');
-    Route::delete('institutes/fees/vouchers', [FeeController::class, 'destroyVouchers'])
-        ->middleware('permission:fee-vouchers.delete')
-        ->name('institutes.fees.vouchers.destroyBulk');
-    Route::delete('institutes/fees/vouchers/{voucherId}', [FeeController::class, 'destroyVoucher'])
-        ->middleware('permission:fee-vouchers.delete')
-        ->name('institutes.fees.vouchers.destroy');
-    Route::delete('institutes/fees/vouchers/batch/{batchId}', [FeeController::class, 'destroyVouchersByBatch'])
-        ->middleware('permission:fee-vouchers.delete')
-        ->name('institutes.fees.vouchers.destroyBatch');
-
-    // API 5: Fetch Student Ledger (Cashier Search)
-    Route::get('institutes/fees/ledger', [FeeController::class, 'ledger'])
-        ->middleware('permission:fee-collections.collect')
-        ->name('institutes.fees.ledger');
-
-    Route::get('institutes/fees/records', [FeeController::class, 'records'])
-        ->middleware('permission:fee-vouchers.view')
-        ->name('institutes.fees.records');
-
-    // Fee reports (fee-collections.reports)
-    Route::middleware('permission:fee-collections.reports')->group(function () {
-        Route::get('institutes/fees/reports/collections', [FeeReportController::class, 'collections'])
-            ->name('institutes.fees.reports.collections');
-        Route::get('institutes/fees/reports/defaulters', [FeeReportController::class, 'defaulters'])
-            ->name('institutes.fees.reports.defaulters');
-        Route::get('institutes/fees/reports/class-recovery', [FeeReportController::class, 'classRecovery'])
-            ->name('institutes.fees.reports.class-recovery');
-        Route::get('institutes/fees/reports/category-summary', [FeeReportController::class, 'categorySummary'])
-            ->name('institutes.fees.reports.category-summary');
-    });
-
-    Route::get('institutes/fees/student-ledger/{student_id}', [FeeReportController::class, 'studentLedger'])
-        ->middleware('permission:fee-vouchers.view')
-        ->whereNumber('student_id')->name('institutes.fees.student-ledger.show');
-
-    // API 5A: Fetch one student's voucher ledger and summary.
-    Route::get('institutes/fees/student-ledger', [FeeController::class, 'studentLedger'])
-        ->middleware('permission:fee-vouchers.view')
-        ->name('institutes.fees.student-ledger');
-
-    // API 5B: Fetch student's fee vouchers list
-    Route::get('institutes/fees/student-vouchers', [FeeController::class, 'studentVouchers'])
-        ->middleware('permission:fee-vouchers.view')
-        ->name('institutes.fees.student-vouchers');
-    Route::get('institutes/fees/vouchers', [FeeController::class, 'studentVouchers'])
-        ->middleware('permission:fee-vouchers.view')
-        ->name('institutes.fees.vouchers.index');
-
-    // API 6: Collect Payment
-    Route::post('institutes/fees/collect', [FeeController::class, 'collect'])
-        ->middleware('permission:fee-collections.collect')
-        ->name('institutes.fees.collect');
+    Route::put('settings/financial', [FeeController::class, 'updateFinancialSettings'])
+        ->middleware('permission:fee-setup.manage')->name('settings.financial.update');
+    Route::post('fees/categories', [FeeController::class, 'storeCategory'])
+        ->middleware('permission:fee-setup.manage')->name('fees.categories.store');
+    Route::post('fees/classes/{classId}/structures', [FeeController::class, 'storeFeeStructure'])
+        ->middleware('permission:fee-setup.manage')->name('fees.classes.structures.store');
+    Route::post('fees/students/{studentId}/addons', [FeeController::class, 'storeStudentAssignment'])
+        ->middleware('permission:fee-setup.manage')->name('fees.students.addons.store');
+    Route::post('fees/vouchers/generate', [FeeController::class, 'generateVouchers'])
+        ->middleware('permission:fee-vouchers.generate')->name('fees.vouchers.generate');
+    Route::get('fees/vouchers', [FeeController::class, 'studentVouchers'])
+        ->middleware('permission:fee-vouchers.view')->name('fees.vouchers.index');
+    Route::post('fees/vouchers/{voucherId}/pay', [FeeController::class, 'collect'])
+        ->whereNumber('voucherId')->middleware('permission:fee-collections.collect')->name('fees.vouchers.pay');
 
     // =====================================================================
     // Module 7: Timetable Generator & Scheduling

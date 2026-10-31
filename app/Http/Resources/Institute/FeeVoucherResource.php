@@ -14,8 +14,10 @@ class FeeVoucherResource extends JsonResource
             'batch_id' => $this->batch_id,
             'billing_month' => $this->billing_month,
             'total_amount' => $this->total_amount,
+            'late_fee_amount' => $this->late_fee_amount ?? 0,
+            'late_fee_waived' => (bool) ($this->late_fee_waived ?? false),
             'paid_amount' => $this->paid_amount,
-            'balance_due' => round($this->total_amount - $this->paid_amount, 2),
+            'balance_due' => $this->balance_due,
             'status' => $this->status,
             'due_date' => $this->due_date?->toDateString(),
             'student' => $this->whenLoaded('student', function () {
@@ -27,13 +29,12 @@ class FeeVoucherResource extends JsonResource
                     'class' => $enrollment?->academicClass?->name ?? 'N/A',
                 ];
             }),
-            // Group on read too, so older vouchers that already contain
-            // duplicate names are returned as a single fee item.
             'items' => $this->items
-                ->groupBy('fee_name')
-                ->map(fn ($items, $feeName) => [
-                    'fee_name' => $feeName,
+                ->groupBy(fn ($item) => $item->description.'|'.($item->type ?? 'charge'))
+                ->map(fn ($items) => [
+                    'description' => $items->first()->description,
                     'amount' => round((float) $items->sum('amount'), 2),
+                    'type' => $items->first()->type ?? 'charge',
                 ])
                 ->values(),
         ];

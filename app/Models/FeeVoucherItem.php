@@ -8,21 +8,22 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class FeeVoucherItem extends Model
 {
     protected $fillable = [
-        'fee_voucher_id',
-        'fee_name',
+        'voucher_id',
+        'description',
         'amount',
+        'type',
     ];
 
     protected function casts(): array
     {
         return [
-            'fee_voucher_id' => 'integer',
+            'voucher_id' => 'integer',
             'amount' => 'float',
         ];
     }
 
     public function feeVoucher(): BelongsTo
     {
-        return $this->belongsTo(FeeVoucher::class);
+        return $this->belongsTo(FeeVoucher::class, 'voucher_id');
     }
 }

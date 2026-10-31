@@ -90,12 +90,12 @@ class FeeReportController extends Controller
         $data = $request->validate(['session_id' => ['required', 'integer'], 'date_from' => ['required', 'date_format:Y-m-d'], 'date_to' => ['required', 'date_format:Y-m-d', 'after_or_equal:date_from']]);
         $instituteId = $this->instituteId($request);
         if (($error = $this->sessionError($data['session_id'], $instituteId)) !== null) return $error;
-        $billedByHead = DB::table('fee_voucher_items')->join('fee_vouchers', 'fee_vouchers.id', '=', 'fee_voucher_items.fee_voucher_id')->where('fee_vouchers.institute_id', $instituteId)->where('fee_vouchers.session_id', $data['session_id'])->whereBetween('fee_vouchers.billing_month', [substr($data['date_from'], 0, 7), substr($data['date_to'], 0, 7)])->select('fee_voucher_items.fee_name')->selectRaw('SUM(fee_voucher_items.amount) as billed')->groupBy('fee_voucher_items.fee_name')->get()->keyBy('fee_name');
+        $billedByHead = DB::table('fee_voucher_items')->join('fee_vouchers', 'fee_vouchers.id', '=', 'fee_voucher_items.voucher_id')->where('fee_vouchers.institute_id', $instituteId)->where('fee_vouchers.session_id', $data['session_id'])->whereBetween('fee_vouchers.billing_month', [substr($data['date_from'], 0, 7), substr($data['date_to'], 0, 7)])->select('fee_voucher_items.description')->selectRaw('SUM(fee_voucher_items.amount) as billed')->groupBy('fee_voucher_items.description')->get()->keyBy('description');
         $paidByHead = [];
         $payments = FeePayment::query()->where('institute_id', $instituteId)->whereBetween('payment_date', [$data['date_from'], $data['date_to']])->whereHas('feeVoucher', fn ($q) => $q->where('session_id', $data['session_id']))->with('feeVoucher.items')->get();
         foreach ($payments as $payment) {
             $items = $payment->feeVoucher->items; $total = (float) $items->sum('amount');
-            foreach ($items as $item) $paidByHead[$item->fee_name] = ($paidByHead[$item->fee_name] ?? 0) + ($total > 0 ? $payment->amount_paid * $item->amount / $total : 0);
+            foreach ($items as $item) $paidByHead[$item->description] = ($paidByHead[$item->description] ?? 0) + ($total > 0 ? $payment->amount_paid * $item->amount / $total : 0);
         }
         $heads = collect($billedByHead->keys())->merge(array_keys($paidByHead))->unique()->map(function ($name) use ($billedByHead, $paidByHead) {
             $billed = (float) ($billedByHead[$name]->billed ?? 0); $collected = (float) ($paidByHead[$name] ?? 0);

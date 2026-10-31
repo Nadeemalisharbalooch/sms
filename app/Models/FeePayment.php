@@ -13,6 +13,7 @@ class FeePayment extends Model
         'amount_paid',
         'payment_date',
         'payment_method',
+        'late_fee_waived',
         'collected_by_user_id',
     ];
 
@@ -23,6 +24,7 @@ class FeePayment extends Model
             'fee_voucher_id' => 'integer',
             'amount_paid' => 'float',
             'payment_date' => 'date',
+            'late_fee_waived' => 'boolean',
             'collected_by_user_id' => 'integer',
         ];
     }
