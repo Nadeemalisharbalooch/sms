@@ -411,6 +411,8 @@ Route::middleware(['auth:sanctum', 'email.verified', 'active.institute.subscript
 
     Route::put('settings/financial', [FeeController::class, 'updateFinancialSettings'])
         ->middleware('permission:fee-setup.manage')->name('settings.financial.update');
+    Route::get('fees/categories', [FeeController::class, 'indexCategories'])
+        ->middleware('permission:fee-setup.view')->name('fees.categories.index');
     Route::post('fees/categories', [FeeController::class, 'storeCategory'])
         ->middleware('permission:fee-setup.manage')->name('fees.categories.store');
     Route::post('fees/classes/{classId}/structures', [FeeController::class, 'storeFeeStructure'])

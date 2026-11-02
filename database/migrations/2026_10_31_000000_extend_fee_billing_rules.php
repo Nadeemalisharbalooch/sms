@@ -12,12 +12,10 @@ return new class extends Migration
             $table->string('type', 20)->default('recurring')->after('name');
             $table->json('default_months')->nullable()->after('type');
         });
-
         Schema::table('fee_structures', function (Blueprint $table) {
             $table->json('charge_months')->nullable();
             $table->dropColumn('recurrence');
         });
-
         Schema::table('student_fee_assignments', function (Blueprint $table) {
             $table->boolean('is_discount')->default(false)->after('amount');
             $table->json('charge_months')->nullable()->after('is_discount');
