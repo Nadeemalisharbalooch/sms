@@ -97,7 +97,9 @@ class FeeController extends Controller
 
         $validated = $request->validated();
 
-        if ($validated['type'] === 'one_time' && $validated['default_months'] !== []) {
+        if ($validated['type'] === 'one_time'
+            && isset($validated['default_months'])
+            && $validated['default_months'] !== []) {
             return ResponseService::error('Validation failed', 422, [
                 'default_months' => ['One-time fee categories must have an empty default_months array.'],
             ]);
