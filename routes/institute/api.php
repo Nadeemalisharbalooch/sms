@@ -421,8 +421,7 @@ Route::middleware(['auth:sanctum', 'email.verified', 'active.institute.subscript
     Route::delete('fees/categories/{categoryId}', [FeeController::class, 'destroyCategory'])
         ->whereNumber('categoryId')
         ->middleware('permission:fee-setup.manage')->name('fees.categories.destroy');
-    Route::get('fees/classes/{classId}/structures', [FeeController::class, 'indexFeeStructures'])
-        ->whereNumber('classId')
+    Route::get('fees/classes/structures', [FeeController::class, 'indexFeeStructures'])
         ->middleware('permission:fee-setup.view')->name('fees.classes.structures.index');
     Route::post('fees/classes/{classId}/structures', [FeeController::class, 'storeFeeStructure'])
         ->whereNumber('classId')
@@ -430,8 +429,7 @@ Route::middleware(['auth:sanctum', 'email.verified', 'active.institute.subscript
     Route::delete('fees/structures/{structureId}', [FeeController::class, 'destroyFeeStructure'])
         ->whereNumber('structureId')
         ->middleware('permission:fee-setup.manage')->name('fees.structures.destroy');
-    Route::get('fees/students/{studentId}/addons', [FeeController::class, 'indexStudentAssignments'])
-        ->whereNumber('studentId')
+    Route::get('fees/students/addons', [FeeController::class, 'indexStudentAssignments'])
         ->middleware('permission:fee-setup.view')->name('fees.students.addons.index');
     Route::post('fees/students/{studentId}/addons', [FeeController::class, 'storeStudentAssignment'])
         ->whereNumber('studentId')

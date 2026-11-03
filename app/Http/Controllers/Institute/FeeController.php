@@ -228,7 +228,7 @@ class FeeController extends Controller
     // API 2: Class Fee Structures
     // =====================================================================
 
-    public function indexFeeStructures(Request $request, int $classId): JsonResponse
+    public function indexFeeStructures(Request $request): JsonResponse
     {
         $instituteId = $this->activeInstituteId($request);
 
@@ -247,9 +247,8 @@ class FeeController extends Controller
         $structures = FeeStructure::query()
             ->where('institute_id', $instituteId)
             ->where('session_id', $sessionId)
-            ->where('class_id', $classId)
             ->with('feeCategory')
-            ->orderBy('id')
+            ->orderBy('class_id')
             ->paginate();
 
         return ResponseService::success(
@@ -331,7 +330,7 @@ class FeeController extends Controller
     // API 3: Student-Specific Fee Assignments
     // =====================================================================
 
-    public function indexStudentAssignments(Request $request, int $studentId): JsonResponse
+    public function indexStudentAssignments(Request $request): JsonResponse
     {
         $instituteId = $this->activeInstituteId($request);
 
@@ -350,9 +349,8 @@ class FeeController extends Controller
         $assignments = StudentFeeAssignment::query()
             ->where('institute_id', $instituteId)
             ->where('session_id', $sessionId)
-            ->where('student_id', $studentId)
             ->with('feeCategory')
-            ->orderBy('id')
+            ->orderBy('student_id')
             ->paginate();
 
         return ResponseService::success(

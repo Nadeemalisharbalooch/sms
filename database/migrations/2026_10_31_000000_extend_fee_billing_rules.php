@@ -82,3 +82,4 @@ return new class extends Migration
         Schema::table('fee_categories', fn (Blueprint $table) => $table->dropColumn(['type', 'default_months']));
     }
 };
+
