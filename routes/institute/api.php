@@ -421,14 +421,33 @@ Route::middleware(['auth:sanctum', 'email.verified', 'active.institute.subscript
     Route::delete('fees/categories/{categoryId}', [FeeController::class, 'destroyCategory'])
         ->whereNumber('categoryId')
         ->middleware('permission:fee-setup.manage')->name('fees.categories.destroy');
+    Route::get('fees/classes/{classId}/structures', [FeeController::class, 'indexFeeStructures'])
+        ->whereNumber('classId')
+        ->middleware('permission:fee-setup.view')->name('fees.classes.structures.index');
     Route::post('fees/classes/{classId}/structures', [FeeController::class, 'storeFeeStructure'])
+        ->whereNumber('classId')
         ->middleware('permission:fee-setup.manage')->name('fees.classes.structures.store');
+    Route::delete('fees/structures/{structureId}', [FeeController::class, 'destroyFeeStructure'])
+        ->whereNumber('structureId')
+        ->middleware('permission:fee-setup.manage')->name('fees.structures.destroy');
+    Route::get('fees/students/{studentId}/addons', [FeeController::class, 'indexStudentAssignments'])
+        ->whereNumber('studentId')
+        ->middleware('permission:fee-setup.view')->name('fees.students.addons.index');
     Route::post('fees/students/{studentId}/addons', [FeeController::class, 'storeStudentAssignment'])
+        ->whereNumber('studentId')
         ->middleware('permission:fee-setup.manage')->name('fees.students.addons.store');
+    Route::delete('fees/students/{studentId}/addons/{assignmentId}', [FeeController::class, 'destroyStudentAssignment'])
+        ->whereNumber(['studentId', 'assignmentId'])
+        ->middleware('permission:fee-setup.manage')->name('fees.students.addons.destroy');
     Route::post('fees/vouchers/generate', [FeeController::class, 'generateVouchers'])
         ->middleware('permission:fee-vouchers.generate')->name('fees.vouchers.generate');
     Route::get('fees/vouchers', [FeeController::class, 'studentVouchers'])
         ->middleware('permission:fee-vouchers.view')->name('fees.vouchers.index');
+    Route::delete('fees/vouchers', [FeeController::class, 'destroyVouchers'])
+        ->middleware('permission:fee-vouchers.generate')->name('fees.vouchers.destroyMany');
+    Route::delete('fees/vouchers/{voucherId}', [FeeController::class, 'destroyVoucher'])
+        ->whereNumber('voucherId')
+        ->middleware('permission:fee-vouchers.generate')->name('fees.vouchers.destroy');
     Route::post('fees/vouchers/{voucherId}/pay', [FeeController::class, 'collect'])
         ->whereNumber('voucherId')->middleware('permission:fee-collections.collect')->name('fees.vouchers.pay');
 

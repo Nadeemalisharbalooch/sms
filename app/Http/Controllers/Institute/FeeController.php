@@ -228,7 +228,7 @@ class FeeController extends Controller
     // API 2: Class Fee Structures
     // =====================================================================
 
-    public function indexFeeStructures(Request $request): JsonResponse
+    public function indexFeeStructures(Request $request, int $classId): JsonResponse
     {
         $instituteId = $this->activeInstituteId($request);
 
@@ -247,8 +247,9 @@ class FeeController extends Controller
         $structures = FeeStructure::query()
             ->where('institute_id', $instituteId)
             ->where('session_id', $sessionId)
+            ->where('class_id', $classId)
             ->with('feeCategory')
-            ->orderBy('class_id')
+            ->orderBy('id')
             ->paginate();
 
         return ResponseService::success(
@@ -330,7 +331,7 @@ class FeeController extends Controller
     // API 3: Student-Specific Fee Assignments
     // =====================================================================
 
-    public function indexStudentAssignments(Request $request): JsonResponse
+    public function indexStudentAssignments(Request $request, int $studentId): JsonResponse
     {
         $instituteId = $this->activeInstituteId($request);
 
@@ -349,9 +350,9 @@ class FeeController extends Controller
         $assignments = StudentFeeAssignment::query()
             ->where('institute_id', $instituteId)
             ->where('session_id', $sessionId)
+            ->where('student_id', $studentId)
             ->with('feeCategory')
-            ->when($request->filled('student_id'), fn ($query) => $query->where('student_id', $request->integer('student_id')))
-            ->orderBy('student_id')
+            ->orderBy('id')
             ->paginate();
 
         return ResponseService::success(
@@ -428,7 +429,7 @@ class FeeController extends Controller
         );
     }
 
-    public function destroyStudentAssignment(Request $request, int $assignmentId): JsonResponse
+    public function destroyStudentAssignment(Request $request, int $studentId, int $assignmentId): JsonResponse
     {
         $instituteId = $this->activeInstituteId($request);
 
@@ -438,6 +439,7 @@ class FeeController extends Controller
 
         $assignment = StudentFeeAssignment::query()
             ->where('institute_id', $instituteId)
+            ->where('student_id', $studentId)
             ->find($assignmentId);
 
         if ($assignment === null) {
