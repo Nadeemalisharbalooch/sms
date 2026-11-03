@@ -415,6 +415,12 @@ Route::middleware(['auth:sanctum', 'email.verified', 'active.institute.subscript
         ->middleware('permission:fee-setup.view')->name('fees.categories.index');
     Route::post('fees/categories', [FeeController::class, 'storeCategory'])
         ->middleware('permission:fee-setup.manage')->name('fees.categories.store');
+    Route::match(['put', 'patch'], 'fees/categories/{categoryId}', [FeeController::class, 'updateCategory'])
+        ->whereNumber('categoryId')
+        ->middleware('permission:fee-setup.manage')->name('fees.categories.update');
+    Route::delete('fees/categories/{categoryId}', [FeeController::class, 'destroyCategory'])
+        ->whereNumber('categoryId')
+        ->middleware('permission:fee-setup.manage')->name('fees.categories.destroy');
     Route::post('fees/classes/{classId}/structures', [FeeController::class, 'storeFeeStructure'])
         ->middleware('permission:fee-setup.manage')->name('fees.classes.structures.store');
     Route::post('fees/students/{studentId}/addons', [FeeController::class, 'storeStudentAssignment'])
