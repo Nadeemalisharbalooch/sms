@@ -439,6 +439,11 @@ Route::middleware(['auth:sanctum', 'email.verified', 'active.institute.subscript
         ->middleware('permission:fee-setup.manage')->name('fees.students.addons.destroy');
     Route::post('fees/vouchers/generate', [FeeController::class, 'generateVouchers'])
         ->middleware('permission:fee-vouchers.generate')->name('fees.vouchers.generate');
+    Route::get('fees/batches', [FeeController::class, 'voucherBatches'])
+        ->middleware('permission:fee-vouchers.view')->name('fees.batches.index');
+    Route::post('fees/batches/{batchId}/rollback', [FeeController::class, 'rollbackVoucherBatch'])
+        ->where('batchId', '[0-9a-fA-F-]{36}')
+        ->middleware('permission:fee-vouchers.generate')->name('fees.batches.rollback');
     Route::get('fees/vouchers', [FeeController::class, 'studentVouchers'])
         ->middleware('permission:fee-vouchers.view')->name('fees.vouchers.index');
     Route::delete('fees/vouchers', [FeeController::class, 'destroyVouchers'])

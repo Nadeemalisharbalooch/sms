@@ -28,6 +28,7 @@ use App\Models\InstituteUser;
 use App\Models\Student;
 use App\Models\StudentFeeAssignment;
 use App\Models\StudentOneTimeFee;
+use App\Models\VoucherBatch;
 use App\Services\ResponseService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -485,6 +486,14 @@ class FeeController extends Controller
             // The batch_id column is a UUID, so use a database-compatible
             // identifier instead of a prefixed string.
             $batchId = (string) Str::uuid();
+            $batch = VoucherBatch::create([
+                'id' => $batchId,
+                'institute_id' => $instituteId,
+                'session_id' => $sessionId,
+                'billing_month' => $billingMonth,
+                'status' => 'active',
+            ]);
+            $batchTotal = 0.0;
             $targetMonth = date('M', strtotime($billingMonth.'-01'));
             $financialSettings = FinancialSetting::firstOrCreate(['institute_id' => $instituteId]);
 
@@ -655,7 +664,14 @@ class FeeController extends Controller
                 }
 
                 $generatedCount++;
+                $batchTotal += $totalAmount;
             }
+
+            $batch->update([
+                'total_amount' => round($batchTotal, 2),
+                'paid_amount' => 0,
+                'remaining_amount' => round($batchTotal, 2),
+            ]);
 
             return ['generated_count' => $generatedCount, 'skipped_count' => $skippedCount, 'batch_id' => $batchId];
         });
@@ -984,6 +1000,107 @@ class FeeController extends Controller
         $voucher->delete();
 
         return ResponseService::success(null, 'Fee voucher deleted successfully');
+    }
+
+    public function voucherBatches(Request $request): JsonResponse
+    {
+        $instituteId = $this->activeInstituteId($request);
+
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $sessionId = $this->activeSessionId($instituteId);
+        if ($sessionId === null) {
+            return ResponseService::error('Validation failed', 422, [
+                'session_id' => ['No active academic session exists for the active institute.'],
+            ]);
+        }
+
+        $validated = $request->validate([
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+        ]);
+        $perPage = $validated['per_page'] ?? 15;
+        $paginator = VoucherBatch::query()
+            ->where('institute_id', $instituteId)
+            ->where('session_id', $sessionId)
+            ->orderByDesc('created_at')
+            ->paginate($perPage);
+
+        return ResponseService::success([
+            'batches' => $paginator->getCollection()->map(fn (VoucherBatch $batch) => [
+                'id' => $batch->id,
+                'billing_month' => $batch->billing_month,
+                'total_amount' => (float) $batch->total_amount,
+                'paid_amount' => (float) $batch->paid_amount,
+                'remaining_amount' => (float) $batch->remaining_amount,
+                'status' => $batch->status,
+                'created_at' => $batch->created_at?->toISOString(),
+            ])->values(),
+            'pagination' => [
+                'current_page' => $paginator->currentPage(),
+                'total_pages' => $paginator->lastPage(),
+                'total_records' => $paginator->total(),
+            ],
+        ], 'Voucher batches retrieved successfully');
+    }
+
+    public function rollbackVoucherBatch(Request $request, string $batchId): JsonResponse
+    {
+        $instituteId = $this->activeInstituteId($request);
+
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $sessionId = $this->activeSessionId($instituteId);
+        if ($sessionId === null) {
+            return ResponseService::error('Validation failed', 422, [
+                'session_id' => ['No active academic session exists for the active institute.'],
+            ]);
+        }
+
+        $result = DB::transaction(function () use ($instituteId, $sessionId, $batchId) {
+            $batch = VoucherBatch::query()
+                ->where('institute_id', $instituteId)
+                ->where('session_id', $sessionId)
+                ->lockForUpdate()
+                ->find($batchId);
+
+            if ($batch === null) {
+                return 'not_found';
+            }
+
+            $vouchers = FeeVoucher::query()
+                ->where('institute_id', $instituteId)
+                ->where('session_id', $sessionId)
+                ->where('batch_id', $batchId)
+                ->lockForUpdate()
+                ->get();
+
+            if ($batch->paid_amount > 0 || $vouchers->contains(fn (FeeVoucher $voucher) => (float) $voucher->paid_amount > 0)) {
+                return 'paid';
+            }
+
+            FeeVoucher::query()->whereIn('id', $vouchers->pluck('id'))->delete();
+            $batch->update(['status' => 'rolled_back', 'remaining_amount' => 0]);
+
+            return 'rolled_back';
+        });
+
+        if ($result === 'not_found') {
+            return ResponseService::notFound('Voucher batch not found');
+        }
+
+        if ($result === 'paid') {
+            return ResponseService::error('Cannot rollback batch because one or more vouchers have already been paid.', 400);
+        }
+
+        return ResponseService::success([
+            'batch_id' => $batchId,
+            'status' => 'rolled_back',
+        ], 'Voucher batch rolled back successfully.');
     }
 
     public function destroyVouchersByBatch(Request $request, string $batchId): JsonResponse
@@ -1567,14 +1684,14 @@ class FeeController extends Controller
         }
 
         $validated = $request->validate([
-            'month' => ['required', 'date_format:Y-m'],
+            'month' => ['nullable', 'date_format:Y-m'],
         ]);
 
-        $month = $validated['month'];
+        $month = $validated['month'] ?? null;
         $vouchers = FeeVoucher::query()
             ->where('institute_id', $instituteId)
             ->where('session_id', $sessionId)
-            ->where('billing_month', $month)
+            ->when($month !== null, fn ($query) => $query->where('billing_month', $month))
             ->with(['student.enrollments' => fn ($query) => $query->where('session_id', $sessionId)->with('academicClass'), 'items'])
             ->orderBy('student_id')
             ->get()
@@ -1672,6 +1789,17 @@ class FeeController extends Controller
                 'late_fee_waived' => $voucher->late_fee_waived || ($waiveLateFee && $lateFeeApplies),
                 'status' => $newPaidAmount >= ($waiveLateFee && $lateFeeApplies ? (float) $voucher->total_amount : $requiredAmount) ? 'paid' : 'partial',
             ]);
+
+            if ($voucher->batch_id !== null) {
+                $batch = VoucherBatch::query()->whereKey($voucher->batch_id)->lockForUpdate()->first();
+                if ($batch !== null) {
+                    $paidAmount = (float) FeeVoucher::query()->where('batch_id', $batch->id)->sum('paid_amount');
+                    $batch->update([
+                        'paid_amount' => round($paidAmount, 2),
+                        'remaining_amount' => round(max(0, (float) $batch->total_amount - $paidAmount), 2),
+                    ]);
+                }
+            }
 
             return ['payment' => $payment, 'voucher' => $voucher];
         });
