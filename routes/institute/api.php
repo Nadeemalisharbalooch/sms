@@ -136,6 +136,10 @@ $instituteResources = function () {
 Route::prefix('institutes')->group($instituteResources);
 Route::prefix('institute')->group($instituteResources);
 
+// Temporary signed links let notification recipients open the private PDF directly.
+Route::get('institutes/fees/vouchers/exports/{exportId}/download', [FeeController::class, 'downloadVoucherPdf'])
+    ->whereNumber('exportId')->middleware('signed')->name('institutes.fees.vouchers.exports.download');
+
 // Dashboard notification tray. Auth only (no subscription requirement) so a
 // blocked/expired user can still read their alerts.
 Route::middleware(['auth:sanctum'])->group(function () {
@@ -450,8 +454,6 @@ Route::middleware(['auth:sanctum', 'email.verified', 'active.institute.subscript
         ->middleware('permission:fee-vouchers.view')->name('fees.vouchers.exports.store');
     Route::get('fees/vouchers/exports/{exportId}', [FeeController::class, 'voucherPdfExportStatus'])
         ->whereNumber('exportId')->middleware('permission:fee-vouchers.view')->name('fees.vouchers.exports.show');
-    Route::get('fees/vouchers/exports/{exportId}/download', [FeeController::class, 'downloadVoucherPdf'])
-        ->whereNumber('exportId')->middleware('permission:fee-vouchers.view')->name('fees.vouchers.exports.download');
     Route::delete('fees/vouchers', [FeeController::class, 'destroyVouchers'])
         ->middleware('permission:fee-vouchers.generate')->name('fees.vouchers.destroyMany');
     Route::delete('fees/vouchers/{voucherId}', [FeeController::class, 'destroyVoucher'])

@@ -36,6 +36,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -1844,7 +1845,7 @@ class FeeController extends Controller
             'status' => $export->status,
             'message' => 'Your PDF download is being prepared. You will receive a notification when it is ready.',
             'status_url' => $statusUrl,
-            'download_url' => url('/api/institutes/fees/vouchers/exports/'.$export->id.'/download'),
+            'download_url' => null,
         ], 'Voucher PDF export queued', 202);
     }
 
@@ -1860,14 +1861,15 @@ class FeeController extends Controller
             'export_id' => $export->id,
             'status' => $export->status,
             'error' => $export->error_message,
-            'download_url' => $export->status === 'ready' ? url('/api/institutes/fees/vouchers/exports/'.$export->id.'/download') : null,
+            'download_url' => $export->status === 'ready'
+                ? URL::temporarySignedRoute('institutes.fees.vouchers.exports.download', now()->addDays(7), ['exportId' => $export->id])
+                : null,
         ], 'Voucher PDF export status retrieved successfully');
     }
 
     public function downloadVoucherPdf(Request $request, int $exportId)
     {
-        $instituteId = $this->activeInstituteId($request);
-        $export = VoucherPdfExport::query()->where('institute_id', $instituteId)->where('user_id', $request->user()->id)->find($exportId);
+        $export = VoucherPdfExport::query()->find($exportId);
         if (! $export) {
             return ResponseService::notFound('Voucher PDF export not found');
         }
