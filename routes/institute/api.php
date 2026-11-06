@@ -446,6 +446,12 @@ Route::middleware(['auth:sanctum', 'email.verified', 'active.institute.subscript
         ->middleware('permission:fee-vouchers.generate')->name('fees.batches.rollback');
     Route::get('fees/vouchers', [FeeController::class, 'studentVouchers'])
         ->middleware('permission:fee-vouchers.view')->name('fees.vouchers.index');
+    Route::post('fees/vouchers/exports', [FeeController::class, 'exportVoucherPdf'])
+        ->middleware('permission:fee-vouchers.view')->name('fees.vouchers.exports.store');
+    Route::get('fees/vouchers/exports/{exportId}', [FeeController::class, 'voucherPdfExportStatus'])
+        ->whereNumber('exportId')->middleware('permission:fee-vouchers.view')->name('fees.vouchers.exports.show');
+    Route::get('fees/vouchers/exports/{exportId}/download', [FeeController::class, 'downloadVoucherPdf'])
+        ->whereNumber('exportId')->middleware('permission:fee-vouchers.view')->name('fees.vouchers.exports.download');
     Route::delete('fees/vouchers', [FeeController::class, 'destroyVouchers'])
         ->middleware('permission:fee-vouchers.generate')->name('fees.vouchers.destroyMany');
     Route::delete('fees/vouchers/{voucherId}', [FeeController::class, 'destroyVoucher'])

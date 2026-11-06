@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Institute;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\GenerateVoucherPdfExport;
 use App\Http\Requests\Institute\CollectFeePaymentRequest;
 use App\Http\Requests\Institute\DeleteVouchersRequest;
 use App\Http\Requests\Institute\FeeRecordsRequest;
@@ -29,11 +30,14 @@ use App\Models\Student;
 use App\Models\StudentFeeAssignment;
 use App\Models\StudentOneTimeFee;
 use App\Models\VoucherBatch;
+use App\Models\VoucherPdfExport;
 use App\Services\ResponseService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class FeeController extends Controller
 {
@@ -1685,26 +1689,75 @@ class FeeController extends Controller
 
         $validated = $request->validate([
             'month' => ['nullable', 'date_format:Y-m'],
+            'billing_month' => ['nullable', 'date_format:Y-m'],
+            'session_id' => ['nullable', 'integer'],
+            'class_id' => ['nullable', 'integer'],
+            'section_id' => ['nullable', 'integer'],
+            'student_id' => ['nullable', 'integer'],
+            'status' => ['nullable', 'string', Rule::in(['unpaid', 'paid', 'partial', 'partially_paid', 'overdue', 'cancelled', 'carried_forward'])],
+            'search' => ['nullable', 'string', 'max:255'],
+            'page' => ['nullable', 'integer', 'min:1'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
-        $month = $validated['month'] ?? null;
-        $vouchers = FeeVoucher::query()
+        $sessionId = $validated['session_id'] ?? $sessionId;
+        if ($validated['session_id'] ?? null) {
+            $sessionBelongsToInstitute = AcademicSession::query()
+                ->whereKey($sessionId)
+                ->where('institute_id', $instituteId)
+                ->exists();
+
+            if (! $sessionBelongsToInstitute) {
+                return ResponseService::error('Validation failed', 422, [
+                    'session_id' => ['The selected session does not belong to the active institute.'],
+                ]);
+            }
+        }
+        $month = $validated['month'] ?? $validated['billing_month'] ?? null;
+        $status = ($validated['status'] ?? null) === 'partially_paid' ? 'partial' : ($validated['status'] ?? null);
+        $search = trim((string) ($validated['search'] ?? ''));
+        $query = FeeVoucher::query()
             ->where('institute_id', $instituteId)
             ->where('session_id', $sessionId)
             ->when($month !== null, fn ($query) => $query->where('billing_month', $month))
-            ->with(['student.enrollments' => fn ($query) => $query->where('session_id', $sessionId)->with('academicClass'), 'items'])
+            ->when($status !== null, fn ($query) => $query->where('status', $status))
+            ->when(($validated['student_id'] ?? null) !== null, fn ($query) => $query->where('student_id', $validated['student_id']))
+            ->when(($validated['class_id'] ?? null) !== null || ($validated['section_id'] ?? null) !== null, fn ($query) => $query->whereHas('student.enrollments', function ($query) use ($validated, $sessionId) {
+                $query->where('session_id', $sessionId)
+                    ->when(($validated['class_id'] ?? null) !== null, fn ($query) => $query->where('class_id', $validated['class_id']))
+                    ->when(($validated['section_id'] ?? null) !== null, fn ($query) => $query->where('section_id', $validated['section_id']));
+            }))
+            ->when($search !== '', fn ($query) => $query->whereHas('student', function ($query) use ($search, $sessionId) {
+                $query->where(function ($query) use ($search, $sessionId) {
+                    $query->where('first_name', 'like', '%'.$search.'%')
+                        ->orWhere('last_name', 'like', '%'.$search.'%')
+                        ->orWhereHas('enrollments', fn ($query) => $query->where('session_id', $sessionId)->where('roll_number', 'like', '%'.$search.'%'));
+                });
+            }));
+
+        $paginator = $query->with(['student.enrollments' => fn ($query) => $query->where('session_id', $sessionId)->with(['academicClass', 'section']), 'items'])
             ->orderBy('student_id')
-            ->get()
-            ->map(function (FeeVoucher $voucher) {
+            ->orderBy('id')
+            ->paginate($validated['per_page'] ?? 15)
+            ->withQueryString();
+        $vouchers = $paginator->getCollection()->map(function (FeeVoucher $voucher) {
                 $student = $voucher->student;
                 $enrollment = $student?->enrollments?->first();
 
                 return [
                     'voucher_id' => $voucher->id,
+                    'student_id' => $student?->id,
                     'student_name' => trim(($student?->first_name ?? '').' '.($student?->last_name ?? '')),
                     'class_name' => $enrollment?->academicClass?->name,
+                    'class_id' => $enrollment?->class_id,
+                    'section_name' => $enrollment?->section?->name,
+                    'section_id' => $enrollment?->section_id,
+                    'roll_number' => $enrollment?->roll_number,
+                    'billing_month' => $voucher->billing_month,
                     'due_date' => $voucher->due_date?->toDateString(),
                     'total_amount' => $voucher->total_amount,
+                    'paid_amount' => $voucher->paid_amount,
+                    'balance_due' => $voucher->balance_due,
                     'late_fee_amount' => $voucher->late_fee_amount,
                     'total_after_due_date' => round((float) $voucher->total_amount + (float) $voucher->late_fee_amount, 2),
                     'status' => $voucher->status,
@@ -1714,9 +1767,115 @@ class FeeController extends Controller
                         'type' => $item->type,
                     ])->values(),
                 ];
-            });
+            })->values();
 
-        return ResponseService::success($vouchers, 'Fee vouchers retrieved successfully');
+        return ResponseService::success([
+            'filters' => [
+                'month' => $month,
+                'session_id' => $sessionId,
+                'class_id' => $validated['class_id'] ?? null,
+                'section_id' => $validated['section_id'] ?? null,
+                'student_id' => $validated['student_id'] ?? null,
+                'status' => $validated['status'] ?? null,
+                'search' => $search !== '' ? $search : null,
+            ],
+            'vouchers' => $vouchers,
+            'pagination' => [
+                'current_page' => $paginator->currentPage(),
+                'per_page' => $paginator->perPage(),
+                'total' => $paginator->total(),
+                'last_page' => $paginator->lastPage(),
+                'from' => $paginator->firstItem(),
+                'to' => $paginator->lastItem(),
+            ],
+        ], 'Fee vouchers retrieved successfully');
+    }
+
+    public function exportVoucherPdf(Request $request): JsonResponse
+    {
+        $instituteId = $this->activeInstituteId($request);
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $sessionId = $this->activeSessionId($instituteId);
+        if ($sessionId === null) {
+            return ResponseService::error('No active academic session exists for the active institute.', 422);
+        }
+
+        $filters = $request->validate([
+            'month' => ['nullable', 'date_format:Y-m'],
+            'billing_month' => ['nullable', 'date_format:Y-m'],
+            'session_id' => ['nullable', 'integer'],
+            'class_id' => ['nullable', 'integer'],
+            'section_id' => ['nullable', 'integer'],
+            'student_id' => ['nullable', 'integer'],
+            'status' => ['nullable', 'string', Rule::in(['unpaid', 'paid', 'partial', 'partially_paid', 'overdue', 'cancelled', 'carried_forward'])],
+            'search' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $sessionId = $filters['session_id'] ?? $sessionId;
+        if (! AcademicSession::query()->whereKey($sessionId)->where('institute_id', $instituteId)->exists()) {
+            return ResponseService::error('Validation failed', 422, ['session_id' => ['The selected session does not belong to the active institute.']]);
+        }
+
+        $filters = [
+            'session_id' => $sessionId,
+            'month' => $filters['month'] ?? $filters['billing_month'] ?? null,
+            'class_id' => $filters['class_id'] ?? null,
+            'section_id' => $filters['section_id'] ?? null,
+            'student_id' => $filters['student_id'] ?? null,
+            'status' => $filters['status'] ?? null,
+            'search' => $filters['search'] ?? null,
+        ];
+
+        $export = VoucherPdfExport::query()->create([
+            'institute_id' => $instituteId,
+            'user_id' => $request->user()->id,
+            'status' => 'queued',
+            'filters' => $filters,
+        ]);
+
+        GenerateVoucherPdfExport::dispatch($export->id);
+
+        $statusUrl = url('/api/institutes/fees/vouchers/exports/'.$export->id);
+        return ResponseService::success([
+            'export_id' => $export->id,
+            'status' => $export->status,
+            'message' => 'Your PDF download is being prepared. You will receive a notification when it is ready.',
+            'status_url' => $statusUrl,
+            'download_url' => url('/api/institutes/fees/vouchers/exports/'.$export->id.'/download'),
+        ], 'Voucher PDF export queued', 202);
+    }
+
+    public function voucherPdfExportStatus(Request $request, int $exportId): JsonResponse
+    {
+        $instituteId = $this->activeInstituteId($request);
+        $export = VoucherPdfExport::query()->where('institute_id', $instituteId)->where('user_id', $request->user()->id)->find($exportId);
+        if (! $export) {
+            return ResponseService::notFound('Voucher PDF export not found');
+        }
+
+        return ResponseService::success([
+            'export_id' => $export->id,
+            'status' => $export->status,
+            'error' => $export->error_message,
+            'download_url' => $export->status === 'ready' ? url('/api/institutes/fees/vouchers/exports/'.$export->id.'/download') : null,
+        ], 'Voucher PDF export status retrieved successfully');
+    }
+
+    public function downloadVoucherPdf(Request $request, int $exportId)
+    {
+        $instituteId = $this->activeInstituteId($request);
+        $export = VoucherPdfExport::query()->where('institute_id', $instituteId)->where('user_id', $request->user()->id)->find($exportId);
+        if (! $export) {
+            return ResponseService::notFound('Voucher PDF export not found');
+        }
+        if ($export->status !== 'ready' || ! $export->file_path || ! Storage::disk('local')->exists($export->file_path)) {
+            return ResponseService::error('Voucher PDF is not ready for download', 409, ['status' => [$export->status]]);
+        }
+
+        return Storage::disk('local')->download($export->file_path, 'fee-vouchers-'.$export->id.'.pdf');
     }
 
     // =====================================================================
