@@ -450,6 +450,9 @@ Route::middleware(['auth:sanctum', 'email.verified', 'active.institute.subscript
         ->middleware('permission:fee-vouchers.generate')->name('fees.batches.rollback');
     Route::get('fees/vouchers', [FeeController::class, 'studentVouchers'])
         ->middleware('permission:fee-vouchers.view')->name('fees.vouchers.index');
+    Route::get('fees/students/{studentId}/vouchers', [FeeController::class, 'vouchersForStudent'])
+        ->whereNumber('studentId')
+        ->middleware('permission:fee-vouchers.view')->name('fees.students.vouchers.index');
     Route::post('fees/vouchers/exports', [FeeController::class, 'exportVoucherPdf'])
         ->middleware('permission:fee-vouchers.view')->name('fees.vouchers.exports.store');
     Route::get('fees/vouchers/exports/{exportId}', [FeeController::class, 'voucherPdfExportStatus'])

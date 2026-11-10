@@ -1695,6 +1695,7 @@ class FeeController extends Controller
             'class_id' => ['nullable', 'integer'],
             'section_id' => ['nullable', 'integer'],
             'student_id' => ['nullable', 'integer'],
+            'batch_id' => ['nullable', 'uuid'],
             'status' => ['nullable', 'string', Rule::in(['unpaid', 'paid', 'partial', 'partially_paid', 'overdue', 'cancelled', 'carried_forward'])],
             'search' => ['nullable', 'string', 'max:255'],
             'page' => ['nullable', 'integer', 'min:1'],
@@ -1722,6 +1723,7 @@ class FeeController extends Controller
             ->where('session_id', $sessionId)
             ->when($month !== null, fn ($query) => $query->where('billing_month', $month))
             ->when($status !== null, fn ($query) => $query->where('status', $status))
+            ->when(($validated['batch_id'] ?? null) !== null, fn ($query) => $query->where('batch_id', $validated['batch_id']))
             ->when(($validated['student_id'] ?? null) !== null, fn ($query) => $query->where('student_id', $validated['student_id']))
             ->when(($validated['class_id'] ?? null) !== null || ($validated['section_id'] ?? null) !== null, fn ($query) => $query->whereHas('student.enrollments', function ($query) use ($validated, $sessionId) {
                 $query->where('session_id', $sessionId)
@@ -1747,6 +1749,7 @@ class FeeController extends Controller
 
                 return [
                     'voucher_id' => $voucher->id,
+                    'batch_id' => $voucher->batch_id,
                     'student_id' => $student?->id,
                     'student_name' => trim(($student?->first_name ?? '').' '.($student?->last_name ?? '')),
                     'class_name' => $enrollment?->academicClass?->name,
@@ -1777,6 +1780,7 @@ class FeeController extends Controller
                 'class_id' => $validated['class_id'] ?? null,
                 'section_id' => $validated['section_id'] ?? null,
                 'student_id' => $validated['student_id'] ?? null,
+                'batch_id' => $validated['batch_id'] ?? null,
                 'status' => $validated['status'] ?? null,
                 'search' => $search !== '' ? $search : null,
             ],
@@ -1790,6 +1794,68 @@ class FeeController extends Controller
                 'to' => $paginator->lastItem(),
             ],
         ], 'Fee vouchers retrieved successfully');
+    }
+
+    /** Retrieve every voucher for one student across the institute's sessions. */
+    public function vouchersForStudent(Request $request, int $studentId): JsonResponse
+    {
+        $instituteId = $this->activeInstituteId($request);
+
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $student = Student::query()
+            ->where('institute_id', $instituteId)
+            ->with('enrollments.academicClass', 'enrollments.section')
+            ->find($studentId);
+
+        if ($student === null) {
+            return ResponseService::notFound('Student not found');
+        }
+
+        $vouchers = FeeVoucher::query()
+            ->where('institute_id', $instituteId)
+            ->where('student_id', $student->id)
+            ->with('items')
+            ->orderByDesc('billing_month')
+            ->orderByDesc('id')
+            ->get()
+            ->map(function (FeeVoucher $voucher) use ($student) {
+                $enrollment = $student->enrollments->firstWhere('session_id', $voucher->session_id);
+
+                return [
+                    'voucher_id' => $voucher->id,
+                    'session_id' => $voucher->session_id,
+                    'billing_month' => $voucher->billing_month,
+                    'class_name' => $enrollment?->academicClass?->name,
+                    'class_id' => $enrollment?->class_id,
+                    'section_name' => $enrollment?->section?->name,
+                    'section_id' => $enrollment?->section_id,
+                    'roll_number' => $enrollment?->roll_number,
+                    'due_date' => $voucher->due_date?->toDateString(),
+                    'total_amount' => $voucher->total_amount,
+                    'paid_amount' => $voucher->paid_amount,
+                    'balance_due' => $voucher->balance_due,
+                    'late_fee_amount' => $voucher->late_fee_amount,
+                    'total_after_due_date' => round((float) $voucher->total_amount + (float) $voucher->late_fee_amount, 2),
+                    'status' => $voucher->status,
+                    'items' => $voucher->items->map(fn ($item) => [
+                        'description' => $item->description,
+                        'amount' => $item->amount,
+                        'type' => $item->type,
+                    ])->values(),
+                ];
+            })
+            ->values();
+
+        return ResponseService::success([
+            'student' => [
+                'student_id' => $student->id,
+                'student_name' => trim(($student->first_name ?? '').' '.($student->last_name ?? '')),
+            ],
+            'vouchers' => $vouchers,
+        ], 'Student vouchers retrieved successfully');
     }
 
     public function exportVoucherPdf(Request $request): JsonResponse
