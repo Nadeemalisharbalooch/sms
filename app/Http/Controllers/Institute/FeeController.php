@@ -1886,6 +1886,24 @@ class FeeController extends Controller
             return ResponseService::error('Validation failed', 422, ['session_id' => ['The selected session does not belong to the active institute.']]);
         }
 
+        if (isset($filters['class_id']) && ! AcademicClass::query()->whereKey($filters['class_id'])->where('institute_id', $instituteId)->exists()) {
+            return ResponseService::error('Validation failed', 422, ['class_id' => ['The selected class does not belong to the active institute.']]);
+        }
+
+        if (isset($filters['section_id'])) {
+            $section = AcademicSection::query()->find($filters['section_id']);
+            $sectionBelongsToInstitute = $section !== null
+                && AcademicClass::query()->whereKey($section->class_id)->where('institute_id', $instituteId)->exists();
+
+            if (! $sectionBelongsToInstitute || isset($filters['class_id']) && (int) $section->class_id !== (int) $filters['class_id']) {
+                return ResponseService::error('Validation failed', 422, ['section_id' => ['The selected section does not belong to the active institute and selected class.']]);
+            }
+        }
+
+        if (isset($filters['student_id']) && ! Student::query()->whereKey($filters['student_id'])->where('institute_id', $instituteId)->exists()) {
+            return ResponseService::error('Validation failed', 422, ['student_id' => ['The selected student does not belong to the active institute.']]);
+        }
+
         $filters = [
             'session_id' => $sessionId,
             'month' => $filters['month'] ?? $filters['billing_month'] ?? null,
