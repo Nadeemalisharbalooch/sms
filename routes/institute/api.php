@@ -455,6 +455,10 @@ Route::middleware(['auth:sanctum', 'email.verified', 'active.institute.subscript
         ->middleware('permission:fee-vouchers.view')->name('fees.students.vouchers.index');
     Route::post('fees/vouchers/exports', [FeeController::class, 'exportVoucherPdf'])
         ->middleware('permission:fee-vouchers.view')->name('fees.vouchers.exports.store');
+    Route::get('fees/vouchers/exports', [FeeController::class, 'voucherPdfExports'])
+        ->middleware('permission:fee-vouchers.view')->name('fees.vouchers.exports.index');
+    Route::delete('fees/vouchers/exports', [FeeController::class, 'destroyVoucherPdfExports'])
+        ->middleware('permission:fee-vouchers.view')->name('fees.vouchers.exports.destroyMany');
     Route::get('fees/vouchers/exports/{exportId}', [FeeController::class, 'voucherPdfExportStatus'])
         ->whereNumber('exportId')->middleware('permission:fee-vouchers.view')->name('fees.vouchers.exports.show');
     Route::delete('fees/vouchers', [FeeController::class, 'destroyVouchers'])

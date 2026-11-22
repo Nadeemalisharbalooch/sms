@@ -1951,6 +1951,53 @@ class FeeController extends Controller
         ], 'Voucher PDF export status retrieved successfully');
     }
 
+    public function voucherPdfExports(Request $request): JsonResponse
+    {
+        $instituteId = $this->activeInstituteId($request);
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $exports = VoucherPdfExport::query()
+            ->where('institute_id', $instituteId)
+            ->where('user_id', $request->user()->id)
+            ->latest()
+            ->paginate(min(max((int) $request->input('per_page', 15), 1), 100));
+
+        return ResponseService::success($exports, 'Voucher PDF exports retrieved successfully');
+    }
+
+    public function destroyVoucherPdfExports(Request $request): JsonResponse
+    {
+        $instituteId = $this->activeInstituteId($request);
+        if ($instituteId === null) {
+            return ResponseService::error('No active institute is associated with this user', 422);
+        }
+
+        $validated = $request->validate([
+            'export_ids' => ['required', 'array', 'min:1'],
+            'export_ids.*' => ['required', 'integer', 'distinct', 'min:1'],
+        ]);
+
+        $exports = VoucherPdfExport::query()
+            ->where('institute_id', $instituteId)
+            ->where('user_id', $request->user()->id)
+            ->whereIn('id', $validated['export_ids'])
+            ->get();
+
+        foreach ($exports as $export) {
+            if ($export->file_path) {
+                Storage::disk('local')->delete($export->file_path);
+            }
+            $export->delete();
+        }
+
+        return ResponseService::success([
+            'deleted_count' => $exports->count(),
+            'deleted_ids' => $exports->modelKeys(),
+        ], 'Voucher PDF exports deleted successfully');
+    }
+
     public function downloadVoucherPdf(Request $request, int $exportId)
     {
         $export = VoucherPdfExport::query()->find($exportId);
