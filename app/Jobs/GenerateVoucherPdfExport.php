@@ -56,7 +56,17 @@ class GenerateVoucherPdfExport implements ShouldQueue
         }
 
         $institute = Institute::query()->findOrFail($export->institute_id);
-        $pdf = Pdf::loadView('pdf.fee-vouchers', ['vouchers' => $vouchers, 'institute' => $institute])
+        $logoDataUri = null;
+        if ($institute->logo && Storage::disk('public')->exists($institute->logo)) {
+            $mimeType = Storage::disk('public')->mimeType($institute->logo) ?: 'image/png';
+            $logoDataUri = 'data:'.$mimeType.';base64,'.base64_encode(Storage::disk('public')->get($institute->logo));
+        }
+
+        $pdf = Pdf::loadView('pdf.fee-vouchers', [
+            'vouchers' => $vouchers,
+            'institute' => $institute,
+            'logoDataUri' => $logoDataUri,
+        ])
             ->setPaper('a4', 'portrait');
         $path = 'voucher-exports/'.$export->institute_id.'/'.$export->id.'.pdf';
         Storage::disk('local')->put($path, $pdf->output());

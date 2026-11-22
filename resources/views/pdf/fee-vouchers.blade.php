@@ -5,9 +5,13 @@
     <style>
         @page { margin: 22px; }
         body { font-family: DejaVu Sans, sans-serif; color: #172033; font-size: 10px; }
-        .voucher { border: 1px solid #64748b; padding: 14px; margin-bottom: 14px; page-break-inside: avoid; }
+        .voucher-page { page-break-inside: avoid; page-break-after: always; }
+        .voucher-page:last-child { page-break-after: auto; }
+        .voucher { border: 1px solid #64748b; padding: 9px 12px; margin-bottom: 8px; page-break-inside: avoid; }
         .copy-label { float: right; color: #475569; font-size: 9px; font-weight: bold; text-transform: uppercase; border: 1px solid #94a3b8; padding: 4px 7px; }
         .brand { border-bottom: 2px solid #334155; padding-bottom: 8px; margin-bottom: 10px; }
+        .brand-logo { float: left; max-width: 58px; max-height: 58px; margin-right: 10px; }
+        .brand-copy { overflow: hidden; }
         .brand h1 { margin: 0 0 3px; font-size: 17px; }
         .brand p { margin: 2px 0; color: #475569; }
         h2 { margin: 8px 0; font-size: 13px; }
@@ -33,14 +37,21 @@
     @php($currency = $institute->currency_symbol ?: 'Rs')
     @php($lateFee = $voucher->late_fee_waived ? 0 : (float) ($voucher->late_fee_amount ?? 0))
     @php($totalAfterDue = (float) $voucher->total_amount + $lateFee)
+    @php($amountDueAfterDue = max(0, $totalAfterDue - (float) $voucher->paid_amount - (float) ($voucher->carried_forward_amount ?? 0)))
     @php($balanceDue = $voucher->status === 'carried_forward' ? (float) ($voucher->carried_forward_amount ?? 0) : (float) $voucher->balance_due)
+    <div class="voucher-page">
     @foreach (['Institute Copy', 'Candidate Copy'] as $copy)
         <section class="voucher {{ $loop->last ? 'candidate' : '' }}">
             <span class="copy-label">{{ $copy }}</span>
             <div class="brand">
-                <h1>{{ $institute->name ?: 'School / Institute' }}</h1>
-                <p>{{ $institute->address }}</p>
-                <p>Helpline: {{ $institute->phone ?: 'Not provided' }}@if($institute->email) &nbsp; | &nbsp; {{ $institute->email }}@endif</p>
+                @if ($logoDataUri)
+                    <img class="brand-logo" src="{{ $logoDataUri }}" alt="Institute logo">
+                @endif
+                <div class="brand-copy">
+                    <h1>{{ $institute->name ?: 'School / Institute' }}</h1>
+                    <p>{{ $institute->address }}</p>
+                    <p>Helpline: {{ $institute->phone ?: 'Not provided' }}@if($institute->email) &nbsp; | &nbsp; {{ $institute->email }}@endif</p>
+                </div>
             </div>
             <div class="clear"></div>
             <h2>Fee Voucher - Billing Month: {{ \Illuminate\Support\Carbon::createFromFormat('Y-m', $voucher->billing_month)->format('F Y') }}</h2>
@@ -64,6 +75,7 @@
                 <tr><td>Late Fee Penalty (if paid after {{ $voucher->due_date?->format('d M Y') ?? 'due date' }})</td><td>+ {{ $currency }} {{ number_format($lateFee, 2) }}</td></tr>
                 <tr class="grand"><td>Total After Due Date</td><td>{{ $currency }} {{ number_format($totalAfterDue, 2) }}</td></tr>
                 <tr><td>Paid Amount</td><td>{{ $currency }} {{ number_format((float) $voucher->paid_amount, 2) }}</td></tr>
+                <tr class="grand"><td>Amount Due After Due Date</td><td>{{ $currency }} {{ number_format($amountDueAfterDue, 2) }}</td></tr>
                 <tr class="grand"><td>Balance Due{{ $voucher->status === 'carried_forward' ? ' (Carried Forward)' : '' }}</td><td>{{ $currency }} {{ number_format($balanceDue, 2) }}</td></tr>
             </table>
             <div class="manual">
@@ -82,6 +94,7 @@
             </div>
         </section>
     @endforeach
+    </div>
 @endforeach
 </body>
 </html>
