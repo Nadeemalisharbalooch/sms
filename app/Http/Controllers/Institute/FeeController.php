@@ -1964,6 +1964,18 @@ class FeeController extends Controller
             ->latest()
             ->paginate(min(max((int) $request->input('per_page', 15), 1), 100));
 
+        $exports->getCollection()->transform(function (VoucherPdfExport $export) {
+            $export->setAttribute('download_url', $export->status === 'ready'
+                ? URL::temporarySignedRoute(
+                    'institutes.fees.vouchers.exports.download',
+                    now()->addDays(7),
+                    ['exportId' => $export->id]
+                )
+                : null);
+
+            return $export;
+        });
+
         return ResponseService::success($exports, 'Voucher PDF exports retrieved successfully');
     }
 
