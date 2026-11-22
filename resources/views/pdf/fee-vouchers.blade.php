@@ -5,8 +5,8 @@
     <style>
         @page { margin: 22px; }
         body { font-family: DejaVu Sans, sans-serif; color: #172033; font-size: 10px; }
-        .voucher-page { page-break-inside: avoid; page-break-after: always; }
-        .voucher-page:last-child { page-break-after: auto; }
+        .voucher-page { page-break-inside: avoid; }
+        .voucher-page.new-page { page-break-before: always; }
         .voucher { border: 1px solid #64748b; padding: 9px 12px; margin-bottom: 8px; page-break-inside: avoid; }
         .copy-label { float: right; color: #475569; font-size: 9px; font-weight: bold; text-transform: uppercase; border: 1px solid #94a3b8; padding: 4px 7px; }
         .brand { border-bottom: 2px solid #334155; padding-bottom: 8px; margin-bottom: 10px; }
@@ -37,9 +37,11 @@
     @php($currency = $institute->currency_symbol ?: 'Rs')
     @php($lateFee = $voucher->late_fee_waived ? 0 : (float) ($voucher->late_fee_amount ?? 0))
     @php($totalAfterDue = (float) $voucher->total_amount + $lateFee)
-    @php($amountDueAfterDue = max(0, $totalAfterDue - (float) $voucher->paid_amount - (float) ($voucher->carried_forward_amount ?? 0)))
+    @php($amountDueAfterDue = $voucher->status === 'carried_forward'
+        ? (float) ($voucher->carried_forward_amount ?? 0)
+        : max(0, $totalAfterDue - (float) $voucher->paid_amount))
     @php($balanceDue = $voucher->status === 'carried_forward' ? (float) ($voucher->carried_forward_amount ?? 0) : (float) $voucher->balance_due)
-    <div class="voucher-page">
+    <div class="voucher-page {{ $loop->first ? '' : 'new-page' }}">
     @foreach (['Institute Copy', 'Candidate Copy'] as $copy)
         <section class="voucher {{ $loop->last ? 'candidate' : '' }}">
             <span class="copy-label">{{ $copy }}</span>
